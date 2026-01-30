@@ -46,7 +46,8 @@ import {
   LeftPanel,
   PropertiesPanel,
   SceneTabs,
-  ElementList
+  ElementList,
+  ElementSection
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -3815,120 +3816,64 @@ onUnmounted(() => {
         </div>
 
         <div class="panel-content pixel-scrollbar">
-          <!-- Images Section (now includes interactive objects) -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.images }">
-            <div class="section-header" @click="toggleSection('images')">
-              <span class="collapse-icon">{{ collapsedSections.images ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('image', 'images')"
-                :indeterminate="isSomeSelectedOfType('image', 'images')"
-                @click.stop="selectAllOfType('image', 'images')"
-                title="Select all"
-              />
-              <span class="section-icon text-image">🖼</span>
-              <span class="section-name">Images</span>
-              <span class="section-count">{{ elementCounts.images }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.images }"
-                @click.stop="toggleVisibility('images')"
-                title="Toggle visibility"
-              >{{ visibleTypes.images ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="handleAddElement('image')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.images">
-              <div
-                v-for="img in currentScene.images"
-                :key="img.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'image' && s.element.id === img.id) }"
-                @click="handleSelectElement('image', img)"
-              >
-                <span class="item-icon text-image">🖼</span>
-                <span class="item-id">#{{ img.id }}</span>
-                <span class="item-name">{{ img.name }}</span>
-                <span v-if="img.interactive" class="item-badge interactive">⚡</span>
-              </div>
-            </div>
-          </div>
+          <!-- Images Section -->
+          <ElementSection
+            type="image"
+            type-plural="images"
+            icon="🖼"
+            label="Images"
+            :items="currentScene.images"
+            :collapsed="collapsedSections.images"
+            :visible="visibleTypes.images"
+            :selected-elements="selectedElements"
+            color-class="text-image"
+            @toggle-collapse="toggleSection('images')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          >
+            <template #item-badges="{ item }">
+              <span v-if="item.interactive" class="item-badge interactive">⚡</span>
+            </template>
+          </ElementSection>
 
           <!-- Walkboxes Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.walkboxes }">
-            <div class="section-header" @click="toggleSection('walkboxes')">
-              <span class="collapse-icon">{{ collapsedSections.walkboxes ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('walkbox', 'walkboxes')"
-                :indeterminate="isSomeSelectedOfType('walkbox', 'walkboxes')"
-                @click.stop="selectAllOfType('walkbox', 'walkboxes')"
-                title="Select all"
-              />
-              <span class="section-icon text-walkbox">▢</span>
-              <span class="section-name">Walkboxes</span>
-              <span class="section-count">{{ elementCounts.walkboxes }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.walkboxes }"
-                @click.stop="toggleVisibility('walkboxes')"
-                title="Toggle visibility"
-              >{{ visibleTypes.walkboxes ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="handleAddElement('walkbox')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.walkboxes">
-              <div
-                v-for="wb in currentScene.walkboxes"
-                :key="wb.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'walkbox' && s.element.id === wb.id) }"
-                @click="handleSelectElement('walkbox', wb)"
-              >
-                <span class="item-icon text-walkbox">▢</span>
-                <span class="item-id">#{{ wb.id }}</span>
-                <span class="item-name">Walkbox {{ wb.id }}</span>
-              </div>
-            </div>
-          </div>
+          <ElementSection
+            type="walkbox"
+            type-plural="walkboxes"
+            icon="▢"
+            label="Walkboxes"
+            :items="currentScene.walkboxes"
+            :collapsed="collapsedSections.walkboxes"
+            :visible="visibleTypes.walkboxes"
+            :selected-elements="selectedElements"
+            color-class="text-walkbox"
+            :get-item-name="(item) => `Walkbox ${item.id}`"
+            @toggle-collapse="toggleSection('walkboxes')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Exits Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.exits }">
-            <div class="section-header" @click="toggleSection('exits')">
-              <span class="collapse-icon">{{ collapsedSections.exits ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('exit', 'exits')"
-                :indeterminate="isSomeSelectedOfType('exit', 'exits')"
-                @click.stop="selectAllOfType('exit', 'exits')"
-                title="Select all"
-              />
-              <span class="section-icon text-exit">→</span>
-              <span class="section-name">Exits</span>
-              <span class="section-count">{{ elementCounts.exits }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.exits }"
-                @click.stop="toggleVisibility('exits')"
-                title="Toggle visibility"
-              >{{ visibleTypes.exits ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="handleAddElement('exit')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.exits">
-              <div
-                v-for="exit in currentScene.exits"
-                :key="exit.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'exit' && s.element.id === exit.id) }"
-                @click="handleSelectElement('exit', exit)"
-              >
-                <span class="item-icon text-exit">→</span>
-                <span class="item-id">#{{ exit.id }}</span>
-                <span class="item-name">{{ exit.name }}</span>
-              </div>
-            </div>
-          </div>
+          <ElementSection
+            type="exit"
+            type-plural="exits"
+            icon="→"
+            label="Exits"
+            :items="currentScene.exits"
+            :collapsed="collapsedSections.exits"
+            :visible="visibleTypes.exits"
+            :selected-elements="selectedElements"
+            color-class="text-exit"
+            @toggle-collapse="toggleSection('exits')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Actor Placements Section (Scene-specific) -->
           <div class="element-section" :class="{ collapsed: collapsedSections.actorPlacements }">
@@ -3962,82 +3907,40 @@ onUnmounted(() => {
           </div>
 
           <!-- Hotspots Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.hotspots }">
-            <div class="section-header" @click="toggleSection('hotspots')">
-              <span class="collapse-icon">{{ collapsedSections.hotspots ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('hotspot', 'hotspots')"
-                :indeterminate="isSomeSelectedOfType('hotspot', 'hotspots')"
-                @click.stop="selectAllOfType('hotspot', 'hotspots')"
-                title="Select all"
-              />
-              <span class="section-icon text-hotspot">◎</span>
-              <span class="section-name">Hotspots</span>
-              <span class="section-count">{{ elementCounts.hotspots }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.hotspots }"
-                @click.stop="toggleVisibility('hotspots')"
-                title="Toggle visibility"
-              >{{ visibleTypes.hotspots ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="handleAddElement('hotspot')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.hotspots">
-              <div
-                v-for="hotspot in currentScene.hotspots"
-                :key="hotspot.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'hotspot' && s.element.id === hotspot.id) }"
-                @click="handleSelectElement('hotspot', hotspot)"
-              >
-                <span class="item-icon text-hotspot">◎</span>
-                <span class="item-id">#{{ hotspot.id }}</span>
-                <span class="item-name">{{ hotspot.name }}</span>
-              </div>
-              <p v-if="currentScene.hotspots.length === 0" class="empty-section">No hotspots</p>
-            </div>
-          </div>
+          <ElementSection
+            type="hotspot"
+            type-plural="hotspots"
+            icon="◎"
+            label="Hotspots"
+            :items="currentScene.hotspots"
+            :collapsed="collapsedSections.hotspots"
+            :visible="visibleTypes.hotspots"
+            :selected-elements="selectedElements"
+            color-class="text-hotspot"
+            @toggle-collapse="toggleSection('hotspots')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Z-Planes Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.zplanes }">
-            <div class="section-header" @click="toggleSection('zplanes')">
-              <span class="collapse-icon">{{ collapsedSections.zplanes ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('zplane', 'zplanes')"
-                :indeterminate="isSomeSelectedOfType('zplane', 'zplanes')"
-                @click.stop="selectAllOfType('zplane', 'zplanes')"
-                title="Select all"
-              />
-              <span class="section-icon text-zplane">▤</span>
-              <span class="section-name">Z-Planes</span>
-              <span class="section-count">{{ elementCounts.zplanes }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.zplanes }"
-                @click.stop="toggleVisibility('zplanes')"
-                title="Toggle visibility"
-              >{{ visibleTypes.zplanes ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="handleAddElement('zplane')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.zplanes">
-              <div
-                v-for="zp in currentScene.zplanes"
-                :key="zp.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'zplane' && s.element.id === zp.id) }"
-                @click="handleSelectElement('zplane', zp)"
-              >
-                <span class="item-icon text-zplane">▤</span>
-                <span class="item-id">#{{ zp.id }}</span>
-                <span class="item-name">{{ zp.name }}</span>
-              </div>
-              <p v-if="currentScene.zplanes.length === 0" class="empty-section">No z-planes</p>
-            </div>
-          </div>
+          <ElementSection
+            type="zplane"
+            type-plural="zplanes"
+            icon="▤"
+            label="Z-Planes"
+            :items="currentScene.zplanes"
+            :collapsed="collapsedSections.zplanes"
+            :visible="visibleTypes.zplanes"
+            :selected-elements="selectedElements"
+            color-class="text-zplane"
+            @toggle-collapse="toggleSection('zplanes')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Section divider for data elements -->
           <div class="section-divider">
@@ -4045,172 +3948,95 @@ onUnmounted(() => {
           </div>
 
           <!-- Dialogs Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.dialogs }">
-            <div class="section-header" @click="toggleSection('dialogs')">
-              <span class="collapse-icon">{{ collapsedSections.dialogs ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('dialog', 'dialogs')"
-                :indeterminate="isSomeSelectedOfType('dialog', 'dialogs')"
-                @click.stop="selectAllOfType('dialog', 'dialogs')"
-                title="Select all"
-              />
-              <span class="section-icon text-dialog">💬</span>
-              <span class="section-name">Dialogs</span>
-              <span class="section-count">{{ elementCounts.dialogs }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('dialog')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.dialogs">
-              <div
-                v-for="dialog in currentScene.dialogs"
-                :key="dialog.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'dialog' && s.element.id === dialog.id) }"
-                @click="handleSelectElement('dialog', dialog)"
-              >
-                <span class="item-icon text-dialog">💬</span>
-                <span class="item-id">#{{ dialog.id }}</span>
-                <span class="item-name">{{ dialog.name }}</span>
-              </div>
-              <p v-if="currentScene.dialogs.length === 0" class="empty-section">No dialogs</p>
-            </div>
-          </div>
+          <ElementSection
+            type="dialog"
+            type-plural="dialogs"
+            icon="💬"
+            label="Dialogs"
+            :items="currentScene.dialogs"
+            :collapsed="collapsedSections.dialogs"
+            :selected-elements="selectedElements"
+            color-class="text-dialog"
+            :show-visibility="false"
+            @toggle-collapse="toggleSection('dialogs')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Puzzles Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.puzzles }">
-            <div class="section-header" @click="toggleSection('puzzles')">
-              <span class="collapse-icon">{{ collapsedSections.puzzles ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('puzzle', 'puzzles')"
-                :indeterminate="isSomeSelectedOfType('puzzle', 'puzzles')"
-                @click.stop="selectAllOfType('puzzle', 'puzzles')"
-                title="Select all"
-              />
-              <span class="section-icon text-puzzle">🧩</span>
-              <span class="section-name">Puzzles</span>
-              <span class="section-count">{{ elementCounts.puzzles }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('puzzle')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.puzzles">
-              <div
-                v-for="puzzle in currentScene.puzzles"
-                :key="puzzle.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'puzzle' && s.element.id === puzzle.id) }"
-                @click="handleSelectElement('puzzle', puzzle)"
-              >
-                <span class="item-icon text-puzzle">🧩</span>
-                <span class="item-id">#{{ puzzle.id }}</span>
-                <span class="item-name">{{ puzzle.name }}</span>
-              </div>
-              <p v-if="currentScene.puzzles.length === 0" class="empty-section">No puzzles</p>
-            </div>
-          </div>
+          <ElementSection
+            type="puzzle"
+            type-plural="puzzles"
+            icon="🧩"
+            label="Puzzles"
+            :items="currentScene.puzzles"
+            :collapsed="collapsedSections.puzzles"
+            :selected-elements="selectedElements"
+            color-class="text-puzzle"
+            :show-visibility="false"
+            @toggle-collapse="toggleSection('puzzles')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Verbs section moved to Global Data area -->
 
           <!-- SFX Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.sfx }">
-            <div class="section-header" @click="toggleSection('sfx')">
-              <span class="collapse-icon">{{ collapsedSections.sfx ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('sfx', 'sfx')"
-                :indeterminate="isSomeSelectedOfType('sfx', 'sfx')"
-                @click.stop="selectAllOfType('sfx', 'sfx')"
-                title="Select all"
-              />
-              <span class="section-icon text-sfx">🔊</span>
-              <span class="section-name">SFX</span>
-              <span class="section-count">{{ elementCounts.sfx }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('sfx')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.sfx">
-              <div
-                v-for="sound in currentScene.sfx"
-                :key="sound.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'sfx' && s.element.id === sound.id) }"
-                @click="handleSelectElement('sfx', sound)"
-              >
-                <span class="item-icon text-sfx">🔊</span>
-                <span class="item-id">#{{ sound.id }}</span>
-                <span class="item-name">{{ sound.name }}</span>
-              </div>
-              <p v-if="currentScene.sfx.length === 0" class="empty-section">No sound effects</p>
-            </div>
-          </div>
+          <ElementSection
+            type="sfx"
+            type-plural="sfx"
+            icon="🔊"
+            label="SFX"
+            :items="currentScene.sfx"
+            :collapsed="collapsedSections.sfx"
+            :selected-elements="selectedElements"
+            color-class="text-sfx"
+            :show-visibility="false"
+            @toggle-collapse="toggleSection('sfx')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Music Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.music }">
-            <div class="section-header" @click="toggleSection('music')">
-              <span class="collapse-icon">{{ collapsedSections.music ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('music', 'music')"
-                :indeterminate="isSomeSelectedOfType('music', 'music')"
-                @click.stop="selectAllOfType('music', 'music')"
-                title="Select all"
-              />
-              <span class="section-icon text-music">🎵</span>
-              <span class="section-name">Music</span>
-              <span class="section-count">{{ elementCounts.music }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('music')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.music">
-              <div
-                v-for="track in currentScene.music"
-                :key="track.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'music' && s.element.id === track.id) }"
-                @click="handleSelectElement('music', track)"
-              >
-                <span class="item-icon text-music">🎵</span>
-                <span class="item-id">#{{ track.id }}</span>
-                <span class="item-name">{{ track.name }}</span>
-              </div>
-              <p v-if="currentScene.music.length === 0" class="empty-section">No music tracks</p>
-            </div>
-          </div>
+          <ElementSection
+            type="music"
+            type-plural="music"
+            icon="🎵"
+            label="Music"
+            :items="currentScene.music"
+            :collapsed="collapsedSections.music"
+            :selected-elements="selectedElements"
+            color-class="text-music"
+            :show-visibility="false"
+            @toggle-collapse="toggleSection('music')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          />
 
           <!-- Cutscenes Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.cutscenes }">
-            <div class="section-header" @click="toggleSection('cutscenes')">
-              <span class="collapse-icon">{{ collapsedSections.cutscenes ? '▶' : '▼' }}</span>
-              <input
-                type="checkbox"
-                class="select-all-checkbox"
-                :checked="isAllSelectedOfType('cutscene', 'cutscenes')"
-                :indeterminate="isSomeSelectedOfType('cutscene', 'cutscenes')"
-                @click.stop="selectAllOfType('cutscene', 'cutscenes')"
-                title="Select all"
-              />
-              <span class="section-icon text-cutscene">🎬</span>
-              <span class="section-name">Cutscenes</span>
-              <span class="section-count">{{ elementCounts.cutscenes }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('cutscene')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.cutscenes">
-              <div
-                v-for="cutscene in currentScene.cutscenes"
-                :key="cutscene.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'cutscene' && s.element.id === cutscene.id) }"
-                @click="handleSelectElement('cutscene', cutscene)"
-              >
-                <span class="item-icon text-cutscene">🎬</span>
-                <span class="item-id">#{{ cutscene.id }}</span>
-                <span class="item-name">{{ cutscene.name }}</span>
-                <span class="item-badge" v-if="cutscene.actions.length > 0">{{ cutscene.actions.length }}</span>
-              </div>
-              <p v-if="currentScene.cutscenes.length === 0" class="empty-section">No cutscenes</p>
-            </div>
-          </div>
+          <ElementSection
+            type="cutscene"
+            type-plural="cutscenes"
+            icon="🎬"
+            label="Cutscenes"
+            :items="currentScene.cutscenes"
+            :collapsed="collapsedSections.cutscenes"
+            :selected-elements="selectedElements"
+            color-class="text-cutscene"
+            :show-visibility="false"
+            @toggle-collapse="toggleSection('cutscenes')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @select-all="selectAllOfType"
+          >
+            <template #item-badges="{ item }">
+              <span class="item-badge" v-if="item.actions?.length > 0">{{ item.actions.length }}</span>
+            </template>
+          </ElementSection>
 
           <!-- Animations Section (Global) -->
           <div class="element-section" :class="{ collapsed: collapsedSections.animations }">
@@ -4303,36 +4129,27 @@ onUnmounted(() => {
           </div>
 
           <!-- Particles Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.particles }">
-            <div class="section-header" @click="toggleSection('particles')">
-              <span class="collapse-icon">{{ collapsedSections.particles ? '▶' : '▼' }}</span>
-              <button
-                class="visibility-toggle"
-                :class="{ hidden: !visibleTypes.particles }"
-                @click.stop="toggleVisibility('particles')"
-                title="Toggle visibility"
-              >{{ visibleTypes.particles ? '👁' : '👁' }}</button>
-              <span class="section-icon text-particle">✨</span>
-              <span class="section-name">Particles</span>
-              <span class="section-count">{{ elementCounts.particles }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('particle')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.particles">
-              <div
-                v-for="emitter in currentScene.particles"
-                :key="emitter.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'particle' && s.element.id === emitter.id) }"
-                @click="handleSelectElement('particle', emitter)"
-              >
-                <span class="item-icon text-particle">{{ getParticleIcon(emitter.preset) }}</span>
-                <span class="item-id">#{{ emitter.id }}</span>
-                <span class="item-name">{{ emitter.name }}</span>
-                <span class="item-badge">{{ emitter.preset }}</span>
-              </div>
-              <p v-if="currentScene.particles.length === 0" class="empty-section">No particle emitters</p>
-            </div>
-          </div>
+          <ElementSection
+            type="particle"
+            type-plural="particles"
+            icon="✨"
+            label="Particles"
+            :items="currentScene.particles"
+            :collapsed="collapsedSections.particles"
+            :visible="visibleTypes.particles"
+            :selected-elements="selectedElements"
+            color-class="text-particle"
+            :show-select-all="false"
+            :get-item-icon="(item) => getParticleIcon(item.preset)"
+            @toggle-collapse="toggleSection('particles')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+          >
+            <template #item-badges="{ item }">
+              <span class="item-badge">{{ item.preset }}</span>
+            </template>
+          </ElementSection>
 
           <!-- GLOBAL DATA SEPARATOR -->
           <div class="section-separator">

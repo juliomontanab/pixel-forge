@@ -82,6 +82,7 @@ src/components/
 ├── panels/
 │   ├── LeftPanel.vue            # [✅] Panel izquierdo contenedor
 │   ├── ElementList.vue          # [✅] Lista de elementos por tipo
+│   ├── ElementSection.vue       # [✅] Sección genérica de elementos (reemplaza 11 secciones)
 │   ├── SceneTabs.vue            # [✅] Tabs de escenas
 │   ├── PropertiesPanel.vue      # [✅] Panel derecho contenedor
 │   └── PropertyEditor.vue       # [ ] Editor genérico de propiedades
@@ -194,6 +195,28 @@ src/components/
 - [x] Integrar `useInteractionSystem.js` (~37 líneas removidas)
 - **Reducción Semana 3.5**: ~1,714 líneas (14,642 → ~12,516)
 - **Reducción total acumulada**: ~3,039 líneas desde inicio (~15,555 → 12,516)
+
+**Semana 4: Extracción de Template** (En progreso - 2026-01-30)
+- [x] Crear `ElementSection.vue` - componente genérico para secciones del panel izquierdo ✅
+- [x] Reemplazar 11 secciones con ElementSection:
+  - [x] Images (con slot para badge interactivo) ✅
+  - [x] Walkboxes (con getItemName personalizado) ✅
+  - [x] Exits ✅
+  - [x] Hotspots ✅
+  - [x] Z-Planes ✅
+  - [x] Dialogs (sin visibility) ✅
+  - [x] Puzzles (sin visibility) ✅
+  - [x] SFX (sin visibility) ✅
+  - [x] Music (sin visibility) ✅
+  - [x] Cutscenes (con slot para actions count) ✅
+  - [x] Particles (con getItemIcon y preset badge) ✅
+- [ ] Crear componentes especializados para secciones complejas:
+  - [ ] ActorPlacementsSection.vue (modal add, remove button)
+  - [ ] AnimationsSection.vue (estructura multi-fila)
+  - [ ] LightsSection.vue (ambient settings inline)
+- [ ] Crear `PropertyField.vue` y `PropertyGroup.vue`
+- **Reducción Semana 4 (parcial)**: ~183 líneas (12,516 → 12,333)
+- **Reducción total acumulada**: ~3,222 líneas desde inicio (~15,555 → 12,333)
 
 ### 1.4 Criterios de Éxito
 

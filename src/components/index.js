@@ -33,6 +33,7 @@ export { default as LeftPanel } from './panels/LeftPanel.vue'
 export { default as PropertiesPanel } from './panels/PropertiesPanel.vue'
 export { default as SceneTabs } from './panels/SceneTabs.vue'
 export { default as ElementList } from './panels/ElementList.vue'
+export { default as ElementSection } from './panels/ElementSection.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
