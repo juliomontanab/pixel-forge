@@ -52,6 +52,9 @@ const currentUserId = computed(() => {
 const route = useRoute()
 const router = useRouter()
 
+// Initialize keyboard shortcuts composable (shortcuts registered after handlers are defined)
+const { registerShortcuts, unregisterAll: unregisterAllShortcuts } = useKeyboardShortcuts()
+
 // Initialize panel state composable
 const {
   leftPanelOpen,
@@ -650,8 +653,67 @@ watch(currentScene, () => {
 }, { deep: true })
 
 // UI state (panel state from usePanelState composable)
-const selectedElements = ref([])
+const canvasRef = ref(null) // Canvas DOM reference for coordinate calculations
 const zoom = ref(1.0) // Start at 100%
+
+// Helper: Get element by type and ID (needed for selection composable)
+const getElementByTypeAndId = (type, id) => {
+  switch (type) {
+    case 'image': return currentScene.value.images.find(e => e.id === id)
+    case 'walkbox': return currentScene.value.walkboxes.find(e => e.id === id)
+    case 'exit': return currentScene.value.exits.find(e => e.id === id)
+    case 'actor': return currentScene.value.actorPlacements.find(e => e.id === id)
+    case 'actorPlacement': return currentScene.value.actorPlacements.find(e => e.id === id)
+    case 'hotspot': return currentScene.value.hotspots.find(e => e.id === id)
+    case 'zplane': return currentScene.value.zplanes.find(e => e.id === id)
+    case 'light': return currentScene.value.lighting?.lights.find(e => e.id === id)
+    case 'particle': return currentScene.value.particles.find(e => e.id === id)
+    default: return null
+  }
+}
+
+// Helper: Get group for an element (needed for selection composable)
+const getElementGroup = (type, elementId) => {
+  if (!currentScene.value.groups || !Array.isArray(currentScene.value.groups)) return null
+  if (!type || elementId === undefined || elementId === null) return null
+  return currentScene.value.groups.find(g => {
+    if (!g || !g.members || !Array.isArray(g.members)) return false
+    return g.members.some(m => {
+      if (!m || !m.type || m.id === undefined || m.id === null) return false
+      return m.type === type && String(m.id) === String(elementId)
+    })
+  })
+}
+
+// Initialize element selection composable (drag, resize, rotation)
+const {
+  selectedElements,
+  isElementSelected,
+  selectElement,
+  clearSelection,
+  selectAllOfType: selectAllElementsOfType,
+  getSceneCoords,
+  isDragging,
+  didDragMove,
+  dragState,
+  startDrag,
+  isResizing,
+  resizeState,
+  startResize,
+  isRotating,
+  rotateState,
+  startRotate,
+  startWalkboxRotate,
+  singleSelectedElement,
+  cleanup: cleanupSelection
+} = useElementSelection({
+  canvasRef,
+  zoom,
+  sceneWidth: computed(() => currentScene.value?.width || 1920),
+  sceneHeight: computed(() => currentScene.value?.height || 1200),
+  getElementGroup,
+  getElementByTypeAndId
+})
 
 // =====================
 // PLAY MODE
@@ -2793,58 +2855,28 @@ const handlePaste = () => {
   selectedElements.value = pastedElements
 }
 
-// Keyboard shortcuts
-const handleKeyDown = (event) => {
-  const isInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'
-
-  // Undo: Ctrl+Z (or Cmd+Z on Mac)
-  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-    event.preventDefault()
-    undo()
-    return
-  }
-
-  // Redo: Ctrl+Shift+Z or Ctrl+Y (or Cmd+Shift+Z / Cmd+Y on Mac)
-  if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
-    event.preventDefault()
-    redo()
-    return
-  }
-
-  // Copy: Ctrl+C (or Cmd+C on Mac)
-  if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
-    if (!isInput && selectedElements.value.length > 0) {
-      event.preventDefault()
+// Register keyboard shortcuts using the composable
+// (composable auto-registers keydown listener on mount)
+registerShortcuts(createEditorShortcuts({
+  undo,
+  redo,
+  copy: () => {
+    if (selectedElements.value.length > 0) {
       handleCopy()
-      return
     }
-  }
-
-  // Paste: Ctrl+V (or Cmd+V on Mac)
-  if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-    if (!isInput && clipboard.value.length > 0) {
-      event.preventDefault()
+  },
+  paste: () => {
+    if (clipboard.value.length > 0) {
       handlePaste()
-      return
     }
+  },
+  delete: handleDeleteElement,
+  deselect: () => {
+    clearSelection()
   }
-
-  // Delete element
-  if (event.key === 'Delete' || event.key === 'Backspace') {
-    if (!isInput) {
-      event.preventDefault()
-      handleDeleteElement()
-    }
-  }
-
-  // Deselect
-  if (event.key === 'Escape') {
-    selectedElements.value = []
-  }
-}
+}))
 
 onMounted(() => {
-  document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('click', handleGlobalClick)
   startActorAnimationPreview()
   startParticleLoop()
@@ -3211,361 +3243,9 @@ const moveAction = (index, direction) => {
   }
 }
 
-// =====================
-// DRAG & DROP SYSTEM
-// =====================
+// DRAG & DROP, RESIZE, and ROTATION systems are provided by useElementSelection composable
+// (see initialization near line 700)
 
-const canvasRef = ref(null)
-const isDragging = ref(false)
-const didDragMove = ref(false) // Track if actual movement happened
-const dragState = ref({
-  startX: 0,
-  startY: 0,
-  clickedElement: null, // { type, element } - the element that was clicked to start drag
-  elements: [] // Array of { type, element, startX, startY, originalPoints }
-})
-
-// Get mouse position relative to canvas in scene coordinates
-const getSceneCoords = (event) => {
-  if (!canvasRef.value) return { x: 0, y: 0 }
-
-  const rect = canvasRef.value.getBoundingClientRect()
-  const x = (event.clientX - rect.left) / zoom.value
-  const y = (event.clientY - rect.top) / zoom.value
-
-  return { x: Math.round(x), y: Math.round(y) }
-}
-
-// Start dragging an element (or all selected elements)
-const startDrag = (event, type, element, wasAlreadySelected = false) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  isDragging.value = true
-  didDragMove.value = false
-  const coords = getSceneCoords(event)
-
-  // Check if this is a multi-select operation
-  const isMultiSelect = event.ctrlKey || event.metaKey || event.shiftKey
-
-  // Start with selected elements
-  let elementsToDrag = [...selectedElements.value]
-
-  // If any selected element is in a group, include all group members
-  const processedGroups = new Set()
-  selectedElements.value.forEach(sel => {
-    const group = getElementGroup(sel.type, sel.element.id)
-    if (group && !processedGroups.has(group.id)) {
-      processedGroups.add(group.id)
-      // Add all group members that aren't already in the drag list
-      group.members.forEach(member => {
-        const alreadyIncluded = elementsToDrag.some(
-          e => e.type === member.type && e.element.id === member.id
-        )
-        if (!alreadyIncluded) {
-          const memberElement = getElementByTypeAndId(member.type, member.id)
-          if (memberElement) {
-            elementsToDrag.push({ type: member.type, element: memberElement })
-          }
-        }
-      })
-    }
-  })
-
-  // Store original positions for all elements being dragged
-  const elementsData = elementsToDrag.map(({ type: t, element: el }) => {
-    if (t === 'walkbox' && el.points) {
-      return {
-        type: t,
-        element: el,
-        startX: el.points[0].x,
-        startY: el.points[0].y,
-        originalPoints: el.points.map(p => ({ x: p.x, y: p.y }))
-      }
-    } else {
-      return {
-        type: t,
-        element: el,
-        startX: el.x,
-        startY: el.y,
-        originalPoints: null
-      }
-    }
-  })
-
-  dragState.value = {
-    startX: coords.x,
-    startY: coords.y,
-    // Only store clickedElement for toggle if it was multi-select AND already selected
-    clickedElement: (wasAlreadySelected && isMultiSelect) ? { type, element } : null,
-    elements: elementsData
-  }
-
-  // Add global listeners
-  document.addEventListener('mousemove', onDragMove)
-  document.addEventListener('mouseup', onDragEnd)
-}
-
-// Handle drag movement
-const onDragMove = (event) => {
-  if (!isDragging.value || dragState.value.elements.length === 0) return
-
-  const coords = getSceneCoords(event)
-  const dx = coords.x - dragState.value.startX
-  const dy = coords.y - dragState.value.startY
-
-  // Mark that actual movement happened (with threshold to avoid micro-movements)
-  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-    didDragMove.value = true
-  }
-
-  // Move all elements being dragged
-  dragState.value.elements.forEach(({ type, element, startX, startY, originalPoints }) => {
-    if (type === 'walkbox' && element.points && originalPoints) {
-      // For walkboxes, move all points
-      element.points.forEach((point, i) => {
-        point.x = Math.max(0, Math.min(currentScene.value.width, originalPoints[i].x + dx))
-        point.y = Math.max(0, Math.min(currentScene.value.height, originalPoints[i].y + dy))
-      })
-    } else {
-      // For regular elements with x, y, w, h
-      element.x = Math.max(0, Math.min(currentScene.value.width - (element.w || 0), startX + dx))
-      element.y = Math.max(0, Math.min(currentScene.value.height - (element.h || 0), startY + dy))
-    }
-  })
-}
-
-// End dragging
-const onDragEnd = () => {
-  // If it was just a click (no drag movement) on an already-selected element, deselect it
-  if (!didDragMove.value && dragState.value.clickedElement) {
-    const { type, element } = dragState.value.clickedElement
-    selectedElements.value = selectedElements.value.filter(
-      s => !(s.type === type && s.element.id === element.id)
-    )
-  }
-
-  isDragging.value = false
-  didDragMove.value = false
-  dragState.value = {
-    startX: 0,
-    startY: 0,
-    clickedElement: null,
-    elements: []
-  }
-
-  // Remove global listeners
-  document.removeEventListener('mousemove', onDragMove)
-  document.removeEventListener('mouseup', onDragEnd)
-}
-
-// =====================
-// RESIZE SYSTEM
-// =====================
-const isResizing = ref(false)
-const resizeState = ref({
-  element: null,
-  handle: null, // 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
-  startX: 0,
-  startY: 0,
-  originalX: 0,
-  originalY: 0,
-  originalW: 0,
-  originalH: 0
-})
-
-const MIN_SIZE = 20 // Minimum element size
-
-// Start resizing
-const startResize = (event, element, handle) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  isResizing.value = true
-    const coords = getSceneCoords(event)
-
-  resizeState.value = {
-    element,
-    handle,
-    startX: coords.x,
-    startY: coords.y,
-    originalX: element.x,
-    originalY: element.y,
-    originalW: element.w,
-    originalH: element.h
-  }
-
-  document.addEventListener('mousemove', onResizeMove)
-  document.addEventListener('mouseup', onResizeEnd)
-}
-
-// Handle resize movement
-const onResizeMove = (event) => {
-  if (!isResizing.value || !resizeState.value.element) return
-
-  const coords = getSceneCoords(event)
-  const dx = coords.x - resizeState.value.startX
-  const dy = coords.y - resizeState.value.startY
-  const el = resizeState.value.element
-  const handle = resizeState.value.handle
-
-  let newX = resizeState.value.originalX
-  let newY = resizeState.value.originalY
-  let newW = resizeState.value.originalW
-  let newH = resizeState.value.originalH
-
-  // Handle horizontal resize
-  if (handle.includes('w')) {
-    newX = Math.max(0, resizeState.value.originalX + dx)
-    newW = Math.max(MIN_SIZE, resizeState.value.originalW - dx)
-    if (newX + newW > resizeState.value.originalX + resizeState.value.originalW) {
-      newX = resizeState.value.originalX + resizeState.value.originalW - MIN_SIZE
-      newW = MIN_SIZE
-    }
-  } else if (handle.includes('e')) {
-    newW = Math.max(MIN_SIZE, Math.min(currentScene.value.width - newX, resizeState.value.originalW + dx))
-  }
-
-  // Handle vertical resize
-  if (handle.includes('n')) {
-    newY = Math.max(0, resizeState.value.originalY + dy)
-    newH = Math.max(MIN_SIZE, resizeState.value.originalH - dy)
-    if (newY + newH > resizeState.value.originalY + resizeState.value.originalH) {
-      newY = resizeState.value.originalY + resizeState.value.originalH - MIN_SIZE
-      newH = MIN_SIZE
-    }
-  } else if (handle.includes('s')) {
-    newH = Math.max(MIN_SIZE, Math.min(currentScene.value.height - newY, resizeState.value.originalH + dy))
-  }
-
-  el.x = newX
-  el.y = newY
-  el.w = newW
-  el.h = newH
-}
-
-// End resizing
-const onResizeEnd = () => {
-  isResizing.value = false
-    resizeState.value = {
-    element: null,
-    handle: null,
-    startX: 0,
-    startY: 0,
-    originalX: 0,
-    originalY: 0,
-    originalW: 0,
-    originalH: 0
-  }
-
-  document.removeEventListener('mousemove', onResizeMove)
-  document.removeEventListener('mouseup', onResizeEnd)
-}
-
-// =====================
-// ROTATION SYSTEM
-// =====================
-const isRotating = ref(false)
-const rotateState = ref({
-  element: null,
-  centerX: 0,
-  centerY: 0,
-  startAngle: 0,
-  originalRotation: 0
-})
-
-// Start rotating
-const startRotate = (event, element) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  isRotating.value = true
-    const coords = getSceneCoords(event)
-
-  // Calculate element center
-  const centerX = element.x + element.w / 2
-  const centerY = element.y + element.h / 2
-
-  // Calculate starting angle from center to mouse
-  const startAngle = Math.atan2(coords.y - centerY, coords.x - centerX) * (180 / Math.PI)
-
-  rotateState.value = {
-    element,
-    centerX,
-    centerY,
-    startAngle,
-    originalRotation: element.rotation || 0
-  }
-
-  document.addEventListener('mousemove', onRotateMove)
-  document.addEventListener('mouseup', onRotateEnd)
-}
-
-// Handle rotation movement
-const onRotateMove = (event) => {
-  if (!isRotating.value || !rotateState.value.element) return
-
-  const coords = getSceneCoords(event)
-  const { centerX, centerY, startAngle, originalRotation, element } = rotateState.value
-
-  // Calculate current angle from center to mouse
-  const currentAngle = Math.atan2(coords.y - centerY, coords.x - centerX) * (180 / Math.PI)
-
-  // Calculate rotation delta
-  let deltaAngle = currentAngle - startAngle
-  let newRotation = originalRotation + deltaAngle
-
-  // Normalize to 0-360
-  newRotation = ((newRotation % 360) + 360) % 360
-
-  // Shift key for 15° snap
-  if (event.shiftKey) {
-    newRotation = Math.round(newRotation / 15) * 15
-  }
-
-  element.rotation = newRotation
-}
-
-// End rotating
-const onRotateEnd = () => {
-  isRotating.value = false
-    rotateState.value = {
-    element: null,
-    centerX: 0,
-    centerY: 0,
-    startAngle: 0,
-    originalRotation: 0
-  }
-
-  document.removeEventListener('mousemove', onRotateMove)
-  document.removeEventListener('mouseup', onRotateEnd)
-}
-
-// Start rotating a walkbox (uses same rotation system but calculates center from points)
-const startWalkboxRotate = (event, walkbox) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  isRotating.value = true
-  const coords = getSceneCoords(event)
-
-  // Calculate walkbox center from points
-  const center = getWalkboxCenter(walkbox)
-
-  // Calculate starting angle from center to mouse
-  const startAngle = Math.atan2(coords.y - center.y, coords.x - center.x) * (180 / Math.PI)
-
-  rotateState.value = {
-    element: walkbox,
-    centerX: center.x,
-    centerY: center.y,
-    startAngle,
-    originalRotation: walkbox.rotation || 0
-  }
-
-  document.addEventListener('mousemove', onRotateMove)
-  document.addEventListener('mouseup', onRotateEnd)
-}
 
 // =====================
 // SPRITESHEET EDITOR
@@ -4756,22 +4436,7 @@ const contextMenu = ref({
   y: 0
 })
 
-// Get group for an element
-const getElementGroup = (type, elementId) => {
-  if (!currentScene.value.groups || !Array.isArray(currentScene.value.groups)) return null
-  if (!type || elementId === undefined || elementId === null) return null
-
-  return currentScene.value.groups.find(g => {
-    if (!g || !g.members || !Array.isArray(g.members)) return false
-    return g.members.some(m => {
-      if (!m || !m.type || m.id === undefined || m.id === null) return false
-      // Use == for comparison to handle string/number differences
-      return m.type === type && String(m.id) === String(elementId)
-    })
-  })
-}
-
-// Check if element is in a group
+// Check if element is in a group (uses getElementGroup defined earlier)
 const isElementInGroup = (type, elementId) => {
   if (!type || elementId === undefined || elementId === null) return false
   const group = getElementGroup(type, elementId)
@@ -4848,22 +4513,7 @@ const selectGroup = () => {
   closeContextMenu()
 }
 
-// Get element by type and ID
-const getElementByTypeAndId = (type, id) => {
-  switch (type) {
-    case 'image': return currentScene.value.images.find(e => e.id === id)
-    case 'walkbox': return currentScene.value.walkboxes.find(e => e.id === id)
-    case 'exit': return currentScene.value.exits.find(e => e.id === id)
-    case 'actor': return currentScene.value.actorPlacements.find(e => e.id === id)
-    case 'hotspot': return currentScene.value.hotspots.find(e => e.id === id)
-    case 'zplane': return currentScene.value.zplanes.find(e => e.id === id)
-    case 'light': return currentScene.value.lighting?.lights.find(e => e.id === id)
-    case 'particle': return currentScene.value.particles.find(e => e.id === id)
-    default: return null
-  }
-}
-
-// Duplicate selected elements
+// Duplicate selected elements (uses getElementByTypeAndId defined earlier)
 const duplicateSelected = () => {
   if (selectedElements.value.length === 0) return
 
@@ -5678,14 +5328,14 @@ onUnmounted(() => {
   // Stop any playing audio
   stopAudioPreview()
 
-  document.removeEventListener('mousemove', onDragMove)
-  document.removeEventListener('mouseup', onDragEnd)
-  document.removeEventListener('mousemove', onResizeMove)
-  document.removeEventListener('mouseup', onResizeEnd)
+  // Cleanup selection composable (removes drag/resize/rotate event listeners)
+  cleanupSelection()
+
+  // Remove remaining event listeners (keyboard shortcuts handled by composable)
   document.removeEventListener('mousemove', onVertexDragMove)
   document.removeEventListener('mouseup', onVertexDragEnd)
-  document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('click', handleGlobalClick)
+  unregisterAllShortcuts()
   stopActorAnimationPreview()
   stopParticleLoop()
 
