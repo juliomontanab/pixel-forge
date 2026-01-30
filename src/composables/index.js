@@ -54,3 +54,18 @@ export { useInteractionSystem, INTERACTION_ACTIONS, CONDITION_OPERATORS } from '
 // Asset and Animation composables
 export { useAnimations, ACTOR_ANIMATION_STATES } from './useAnimations'
 export { useAssetManager } from './useAssetManager'
+
+// Storage and persistence composables
+export { useLocalStorage } from './useLocalStorage'
+export { useAiPanel } from './useAiPanel'
+
+// Visual composables
+export { useParallax } from './useParallax'
+export { useBackgroundScaling } from './useBackgroundScaling'
+
+// UI Helper composables
+export { useAudioUI } from './useAudioUI'
+export { useCutsceneActions, ACTION_TYPES } from './useCutsceneActions'
+export { useItemUI } from './useItemUI'
+export { useDialogEditor } from './useDialogEditor'
+export { useAssetUI, CATEGORY_LABELS } from './useAssetUI'

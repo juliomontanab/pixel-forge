@@ -27,6 +27,11 @@ import { useLocalStorage } from '@/composables/useLocalStorage'
 import { useAiPanel } from '@/composables/useAiPanel'
 import { useParallax } from '@/composables/useParallax'
 import { useBackgroundScaling } from '@/composables/useBackgroundScaling'
+import { useAudioUI } from '@/composables/useAudioUI'
+import { useCutsceneActions } from '@/composables/useCutsceneActions'
+import { useItemUI } from '@/composables/useItemUI'
+import { useDialogEditor } from '@/composables/useDialogEditor'
+import { useAssetUI, CATEGORY_LABELS } from '@/composables/useAssetUI'
 
 // Refactored components
 import {
@@ -1066,6 +1071,101 @@ const {
   saveStatus
 })
 
+// Initialize audio UI composable
+const {
+  audioUploadDragging,
+  currentlyPlayingAudio,
+  handleAudioUpload,
+  onAudioFileChange,
+  onAudioDragOver,
+  onAudioDragLeave,
+  onAudioDrop,
+  handleAudioUploadFiles,
+  updateAudioAssetField,
+  deleteAudioAsset,
+  playAudioPreview,
+  stopAudioPreview,
+  formatDuration,
+  cleanup: cleanupAudio
+} = useAudioUI({
+  project,
+  autoSaveProject
+})
+
+// Initialize cutscene actions composable
+const {
+  getDefaultParams,
+  addAction,
+  removeAction,
+  moveAction
+} = useCutsceneActions({
+  selectedElements
+})
+
+// Initialize item UI composable
+const {
+  showAddToInventoryModal,
+  getItemById,
+  getItemIconStyle,
+  itemHasAssetIcon,
+  addToInventory,
+  removeFromInventory,
+  toggleInventoryItem
+} = useItemUI({
+  project,
+  getAssetById,
+  getAssetDisplayUrl
+})
+
+// Initialize dialog editor composable
+const {
+  getActorById,
+  hasActorAnimation,
+  getDialogActorPreviewStyle,
+  addDialogLine,
+  removeDialogLine,
+  addDialogChoice,
+  removeDialogChoice
+} = useDialogEditor({
+  project,
+  getActorCurrentAnimation,
+  getAnimationSpritesheetUrl,
+  getAnimationSpritesheetSize,
+  actorPreviewFrames
+})
+
+// Initialize asset UI composable
+const {
+  assetUploadDragging,
+  assetFilterCategory,
+  assetSearchQuery,
+  showNewFolderInput,
+  newFolderName,
+  renamingFolderId,
+  renamingFolderValue,
+  assetCountByCategory,
+  getSubfolders,
+  getFolderAssetCount,
+  startRenamingFolder,
+  cancelRenamingFolder,
+  onAssetFileChange,
+  onAssetDragOver,
+  onAssetDragLeave,
+  onAssetDrop,
+  handleAssetUploadFiles,
+  handleAssetDragStart,
+  handleFolderDrop,
+  categoryLabels
+} = useAssetUI({
+  globalAssets,
+  globalAssetFolders,
+  handleAssetUpload,
+  moveAssetToFolder
+})
+
+// Modal for placing actors
+const showPlaceActorModal = ref(false)
+
 // Setup auto-save watcher for localStorage
 setupAutoSaveWatcher()
 
@@ -2012,459 +2112,12 @@ const handleSelectElement = (type, element, event) => {
   }
 }
 
-// =====================
-// CUTSCENE ACTIONS
-// =====================
-
-// Default params for each action type
-const getDefaultParams = (type) => {
-  switch (type) {
-    case 'dialog':
-      return { actorId: null, text: '', emotion: null }
-    case 'move-actor':
-      return { actorId: null, x: 0, y: 0, walk: true }
-    case 'actor-direction':
-      return { actorId: null, direction: 'south' }
-    case 'actor-costume':
-      return { actorId: null, costume: '' }
-    case 'play-sfx':
-      return { sfxId: null }
-    case 'play-music':
-      return { musicId: null, fadeIn: 0 }
-    case 'stop-music':
-      return { fadeOut: 0 }
-    case 'wait':
-      return { duration: 1000 }
-    case 'fade-in':
-      return { duration: 500, color: '#000000' }
-    case 'fade-out':
-      return { duration: 500, color: '#000000' }
-    case 'camera-pan':
-      return { x: 0, y: 0, duration: 1000 }
-    case 'camera-shake':
-      return { intensity: 5, duration: 500 }
-    case 'change-scene':
-      return { sceneId: '', transition: 'fade' }
-    default:
-      return {}
-  }
-}
-
-// Add a new action to the selected cutscene
-const addAction = (event) => {
-  const type = event.target.value
-  if (!type) return
-
-  if (selectedElements.value.length === 1 && selectedElements.value[0].type === 'cutscene') {
-    const cutscene = selectedElements.value[0].element
-    cutscene.actions.push({
-      id: Date.now(),
-      type,
-      delay: 0,
-      duration: type === 'wait' ? 1000 : 0,
-      params: getDefaultParams(type)
-    })
-  }
-
-  // Reset select
-  event.target.value = ''
-}
-
-// Remove an action from the selected cutscene
-const removeAction = (index) => {
-  if (selectedElements.value.length === 1 && selectedElements.value[0].type === 'cutscene') {
-    selectedElements.value[0].element.actions.splice(index, 1)
-  }
-}
-
-// Move an action up or down in the list
-const moveAction = (index, direction) => {
-  if (selectedElements.value.length === 1 && selectedElements.value[0].type === 'cutscene') {
-    const actions = selectedElements.value[0].element.actions
-    const newIndex = index + direction
-    if (newIndex >= 0 && newIndex < actions.length) {
-      const [action] = actions.splice(index, 1)
-      actions.splice(newIndex, 0, action)
-    }
-  }
-}
-
 // DRAG & DROP, RESIZE, and ROTATION systems are provided by useElementSelection composable
 // (see initialization near line 700)
 
-
 // =====================
-// ACTOR HELPERS (not in composables)
+// LIGHT & PARTICLE MANAGEMENT
 // =====================
-
-// Get actor by ID (from global actors, for dialogs)
-const getActorById = (actorId) => {
-  return project.value.globalData.actors.find(a => a.id === actorId)
-}
-
-// Check if actor has animation for current state (for global actors)
-const hasActorAnimation = (actorId) => {
-  const actor = getGlobalActorById(actorId)
-  if (!actor || !actor.animations) return false
-  // Check if any animation is assigned
-  return Object.values(actor.animations).some(animId => animId !== null)
-}
-
-// Get style for dialog actor preview (smaller version for panel)
-const getDialogActorPreviewStyle = (actorId) => {
-  const actor = getActorById(actorId)
-  if (!actor) return {}
-
-  const anim = getActorCurrentAnimation(actor)
-  if (!anim || !anim.frames?.length) return {}
-
-  const spritesheetUrl = getAnimationSpritesheetUrl(anim)
-  if (!spritesheetUrl) return {}
-
-  const frameIndex = actorPreviewFrames.value[actor.id] || 0
-  const frame = anim.frames[frameIndex % anim.frames.length]
-  const size = getAnimationSpritesheetSize(anim)
-
-  return {
-    width: '64px',
-    height: '64px',
-    backgroundImage: `url(${spritesheetUrl})`,
-    backgroundPosition: `-${frame.x}px -${frame.y}px`,
-    backgroundSize: `${size.width}px ${size.height}px`,
-    imageRendering: 'pixelated'
-  }
-}
-
-// Dialog line management
-const removeDialogLine = (dialog, index) => {
-  if (dialog.lines.length > 1) {
-    dialog.lines.splice(index, 1)
-  }
-}
-
-// Dialog choice management
-const addDialogChoice = (dialog) => {
-  if (!dialog.choices) dialog.choices = []
-  dialog.choices.push({ id: Date.now(), text: '', targetDialog: null })
-}
-
-const removeDialogChoice = (dialog, index) => {
-  dialog.choices.splice(index, 1)
-}
-
-// =====================
-// ITEM & INVENTORY SYSTEM (GLOBAL)
-// =====================
-
-// Get item by ID (from global items)
-const getItemById = (itemId) => {
-  return project.value.globalData.items.find(i => i.id === itemId)
-}
-
-// Get item icon style (returns background style if asset, null if emoji)
-const getItemIconStyle = (item) => {
-  if (!item) return null
-  if (item.iconAssetId) {
-    const asset = getAssetById(item.iconAssetId)
-    if (asset) {
-      const url = getAssetDisplayUrl(asset)
-      if (url) {
-        return {
-          backgroundImage: `url(${url})`,
-          backgroundSize: 'contain',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }
-      }
-    }
-  }
-  return null
-}
-
-// Check if item has asset icon
-const itemHasAssetIcon = (item) => {
-  if (!item) return false
-  return item.iconAssetId && getAssetById(item.iconAssetId)
-}
-
-// Add item to inventory (global)
-const addToInventory = (itemId) => {
-  if (!project.value.globalData.inventory.includes(itemId)) {
-    project.value.globalData.inventory.push(itemId)
-  }
-}
-
-// Remove item from inventory (global)
-const removeFromInventory = (itemId) => {
-  const index = project.value.globalData.inventory.indexOf(itemId)
-  if (index > -1) {
-    project.value.globalData.inventory.splice(index, 1)
-  }
-}
-
-// Toggle item in inventory (for modal)
-const toggleInventoryItem = (itemId) => {
-  if (project.value.globalData.inventory.includes(itemId)) {
-    removeFromInventory(itemId)
-  } else {
-    addToInventory(itemId)
-  }
-}
-
-// Modal for adding items to inventory
-const showAddToInventoryModal = ref(false)
-const showPlaceActorModal = ref(false)
-
-// =====================
-// ASSET MANAGEMENT UI (state and functions from useAssetManager composable)
-// =====================
-// UI-specific state (not in composable)
-const assetUploadDragging = ref(false)
-const assetFilterCategory = ref('all') // Filtro de visualización
-const assetSearchQuery = ref('') // Búsqueda por nombre
-const showNewFolderInput = ref(false) // Mostrar input para nueva carpeta
-const newFolderName = ref('') // Nombre para nueva carpeta
-const renamingFolderId = ref(null) // ID de carpeta en edición
-const renamingFolderValue = ref('') // Nuevo nombre durante edición
-
-// Labels amigables para categorías
-const categoryLabels = {
-  image: {
-    background: 'Background',
-    object: 'Object',
-    sprite: 'Sprite',
-    ui: 'UI Element',
-    other: 'Other'
-  },
-  audio: {
-    music: 'Music',
-    sfx: 'Sound Effect',
-    ambient: 'Ambient',
-    voice: 'Voice',
-    other: 'Other'
-  }
-}
-
-// Conteo de assets por categoría
-const assetCountByCategory = computed(() => {
-  const counts = { all: 0, background: 0, object: 0, sprite: 0, ui: 0, other: 0 }
-  const assets = globalAssets.value || []
-
-  assets.forEach(a => {
-    counts.all++
-    const cat = a.category || 'other'
-    if (counts[cat] !== undefined) {
-      counts[cat]++
-    } else {
-      counts.other++
-    }
-  })
-
-  return counts
-})
-
-// Get subfolders of a parent folder
-const getSubfolders = (parentPath) => {
-  const folders = globalAssetFolders.value || []
-  return folders.filter(f => f.parentPath === parentPath)
-}
-
-// Get items count in a folder (for display)
-const getFolderAssetCount = (folderPath, recursive = true) => {
-  const assets = globalAssets.value || []
-  if (recursive) {
-    return assets.filter(a =>
-      (a.folderPath || '/') === folderPath ||
-      (a.folderPath || '/').startsWith(folderPath + '/')
-    ).length
-  }
-  return assets.filter(a => (a.folderPath || '/') === folderPath).length
-}
-
-// Start renaming a folder
-const startRenamingFolder = (folder) => {
-  renamingFolderId.value = folder.id
-  renamingFolderValue.value = folder.name
-}
-
-// Cancel folder renaming
-const cancelRenamingFolder = () => {
-  renamingFolderId.value = null
-  renamingFolderValue.value = ''
-}
-
-// =====================
-// ASSET FILE HANDLING
-// =====================
-// Handle file input change
-const onAssetFileChange = (event) => {
-  const files = event.target.files
-  if (files) {
-    Array.from(files).forEach(handleAssetUpload)
-  }
-  event.target.value = ''
-}
-
-// Handle drag/drop
-const onAssetDragOver = (event) => {
-  event.preventDefault()
-  assetUploadDragging.value = true
-}
-
-const onAssetDragLeave = () => {
-  assetUploadDragging.value = false
-}
-
-const onAssetDrop = (event) => {
-  event.preventDefault()
-  assetUploadDragging.value = false
-  const files = event.dataTransfer.files
-  if (files) {
-    Array.from(files).forEach(handleAssetUpload)
-  }
-}
-
-// Handle asset upload files (for AssetManagerModal)
-const handleAssetUploadFiles = (files) => {
-  files.forEach(handleAssetUpload)
-}
-
-// Handle asset drag start (for moving between folders)
-const handleAssetDragStart = (event, asset) => {
-  event.dataTransfer.setData('application/json', JSON.stringify({
-    type: 'asset',
-    assetId: asset.id,
-    sourcePath: asset.folderPath || '/'
-  }))
-  event.dataTransfer.effectAllowed = 'move'
-}
-
-// Handle folder drop (receiving dragged asset)
-const handleFolderDrop = (event, targetFolderPath) => {
-  try {
-    const data = JSON.parse(event.dataTransfer.getData('application/json'))
-    if (data.type === 'asset') {
-      moveAssetToFolder(data.assetId, targetFolderPath)
-    }
-  } catch (e) {
-    // Not a valid asset drag
-  }
-}
-
-// =====================
-// AUDIO MANAGEMENT (showAudioManagerModal comes from useAssetManager)
-// =====================
-const audioUploadDragging = ref(false)
-const currentlyPlayingAudio = ref(null)  // { id, audioElement }
-
-// Upload audio from file
-const handleAudioUpload = (file) => {
-  if (!file || !file.type.startsWith('audio/')) return
-
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    // Create audio element to get duration
-    const audio = new Audio()
-    audio.onloadedmetadata = () => {
-      const audioAsset = {
-        id: Date.now(),
-        name: file.name.replace(/\.[^.]+$/, ''),
-        data: e.target.result,
-        duration: audio.duration,
-        format: file.type.split('/')[1] || 'unknown',
-        type: 'sfx'  // Default, can be changed to 'music'
-      }
-      project.value.globalData.audioAssets.push(audioAsset)
-    }
-    audio.src = e.target.result
-  }
-  reader.readAsDataURL(file)
-}
-
-// Handle audio file input change
-const onAudioFileChange = (event) => {
-  const files = event.target.files
-  if (files) {
-    Array.from(files).forEach(handleAudioUpload)
-  }
-  event.target.value = ''
-}
-
-// Handle audio drag/drop
-const onAudioDragOver = (event) => {
-  event.preventDefault()
-  audioUploadDragging.value = true
-}
-
-const onAudioDragLeave = () => {
-  audioUploadDragging.value = false
-}
-
-const onAudioDrop = (event) => {
-  event.preventDefault()
-  audioUploadDragging.value = false
-  const files = event.dataTransfer.files
-  if (files) {
-    Array.from(files).forEach(handleAudioUpload)
-  }
-}
-
-// Handle audio upload files (for AudioManagerModal)
-const handleAudioUploadFiles = (files) => {
-  files.forEach(handleAudioUpload)
-}
-
-// Update audio asset field (for AudioManagerModal)
-const updateAudioAssetField = (audioId, field, value) => {
-  const audio = project.value.globalData.audioAssets.find(a => a.id === audioId)
-  if (audio) {
-    audio[field] = value
-  }
-}
-
-// Delete audio asset
-const deleteAudioAsset = (audioId) => {
-  // Stop if currently playing
-  if (currentlyPlayingAudio.value?.id === audioId) {
-    stopAudioPreview()
-  }
-  const idx = project.value.globalData.audioAssets.findIndex(a => a.id === audioId)
-  if (idx > -1) {
-    project.value.globalData.audioAssets.splice(idx, 1)
-  }
-}
-
-// Play audio preview
-const playAudioPreview = (audioAsset) => {
-  // Stop any currently playing audio
-  stopAudioPreview()
-
-  const audio = new Audio(audioAsset.data)
-  audio.volume = 0.5
-  audio.onended = () => {
-    currentlyPlayingAudio.value = null
-  }
-  audio.play()
-  currentlyPlayingAudio.value = { id: audioAsset.id, audioElement: audio }
-}
-
-// Stop audio preview
-const stopAudioPreview = () => {
-  if (currentlyPlayingAudio.value?.audioElement) {
-    currentlyPlayingAudio.value.audioElement.pause()
-    currentlyPlayingAudio.value.audioElement.currentTime = 0
-  }
-  currentlyPlayingAudio.value = null
-}
-
-// Format duration as mm:ss
-const formatDuration = (seconds) => {
-  if (!seconds || isNaN(seconds)) return '0:00'
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
 // Delete selected light
 const deleteSelectedLight = () => {
   if (selectedElements.value.length === 0 || selectedElements.value[0].type !== 'light') return
