@@ -925,6 +925,26 @@ const exitPlayMode = () => {
   exitPlayModeFromComposable()
 }
 
+// Computed properties for PlayModeOverlay component
+const inventoryItemsWithUrls = computed(() => {
+  return getInventoryItems.value.map(item => ({
+    ...item,
+    iconUrl: item.iconAssetId && getAssetById(item.iconAssetId)
+      ? getAssetDisplayUrl(getAssetById(item.iconAssetId))
+      : null
+  }))
+})
+
+const currentMusicName = computed(() => {
+  if (!playModeState.value.currentMusic?.audioAssetId) return null
+  return getAudioAssetById(playModeState.value.currentMusic.audioAssetId)?.name || 'Playing'
+})
+
+// Handler functions for PlayModeOverlay events
+const handleCancelItem = () => {
+  playModeState.value.selectedItem = null
+}
+
 // Wrapper for changeSceneWithTransition
 const changeSceneWithTransition = (sceneId) => {
   changeSceneWithTransitionFromComposable(sceneId, {
@@ -2161,105 +2181,20 @@ onUnmounted(() => {
 
             <!-- Elements overlay -->
             <div class="elements-overlay">
-              <!-- Walkboxes -->
-              <!-- Walkboxes (SVG polygons) -->
-              <svg
+              <!-- Walkboxes (SVG component) -->
+              <CanvasWalkbox
                 v-if="visibleTypes.walkboxes && !playMode"
-                class="walkbox-svg-layer"
-                :width="currentScene.width * zoom"
-                :height="currentScene.height * zoom"
-              >
-                <g
-                  v-for="wb in currentScene.walkboxes"
-                  :key="'wb-' + wb.id"
-                  :transform="`rotate(${wb.rotation || 0}, ${getWalkboxCenter(wb).x * zoom}, ${getWalkboxCenter(wb).y * zoom})`"
-                >
-                  <!-- Polygon fill -->
-                  <polygon
-                    :points="wb.points.map(p => `${p.x * zoom},${p.y * zoom}`).join(' ')"
-                    class="walkbox-polygon"
-                    :class="{ selected: selectedElements.some(s => s.type === 'walkbox' && s.element.id === wb.id) }"
-                    @mousedown="handleSelectElement('walkbox', wb, $event)"
-                    @click.stop
-                  />
-
-                  <!-- Edges (clickable to add vertices) -->
-                  <template v-if="selectedElements.some(s => s.type === 'walkbox' && s.element.id === wb.id)">
-                    <!-- Invisible thick line for easier clicking -->
-                    <line
-                      v-for="(point, idx) in wb.points"
-                      :key="'edge-' + idx"
-                      :x1="point.x * zoom"
-                      :y1="point.y * zoom"
-                      :x2="wb.points[(idx + 1) % wb.points.length].x * zoom"
-                      :y2="wb.points[(idx + 1) % wb.points.length].y * zoom"
-                      class="walkbox-edge"
-                      @click.stop="addWalkboxVertex(wb, idx, $event)"
-                    />
-                    <!-- "+" indicator at edge midpoint -->
-                    <g
-                      v-for="(point, idx) in wb.points"
-                      :key="'edge-add-' + idx"
-                      class="walkbox-edge-add"
-                      @click.stop="addWalkboxVertex(wb, idx, $event)"
-                    >
-                      <circle
-                        :cx="((point.x + wb.points[(idx + 1) % wb.points.length].x) / 2) * zoom"
-                        :cy="((point.y + wb.points[(idx + 1) % wb.points.length].y) / 2) * zoom"
-                        r="10"
-                        class="walkbox-edge-add-bg"
-                      />
-                      <text
-                        :x="((point.x + wb.points[(idx + 1) % wb.points.length].x) / 2) * zoom"
-                        :y="((point.y + wb.points[(idx + 1) % wb.points.length].y) / 2) * zoom"
-                        class="walkbox-edge-add-icon"
-                      >+</text>
-                    </g>
-                  </template>
-
-                  <!-- Vertex handles -->
-                  <template v-if="selectedElements.some(s => s.type === 'walkbox' && s.element.id === wb.id)">
-                    <circle
-                      v-for="(point, idx) in wb.points"
-                      :key="'vertex-' + idx"
-                      :cx="point.x * zoom"
-                      :cy="point.y * zoom"
-                      r="6"
-                      class="walkbox-vertex"
-                      :class="{ 'can-delete': wb.points.length > 3 }"
-                      @mousedown.stop="startVertexDrag($event, wb, idx)"
-                      @dblclick.stop="removeWalkboxVertex(wb, idx)"
-                    />
-                  </template>
-
-                  <!-- Rotate handle -->
-                  <template v-if="selectedElements.some(s => s.type === 'walkbox' && s.element.id === wb.id)">
-                    <line
-                      :x1="getWalkboxCenter(wb).x * zoom"
-                      :y1="getWalkboxCenter(wb).y * zoom - 30"
-                      :x2="getWalkboxCenter(wb).x * zoom"
-                      :y2="getWalkboxCenter(wb).y * zoom - 55"
-                      class="walkbox-rotate-line"
-                    />
-                    <circle
-                      :cx="getWalkboxCenter(wb).x * zoom"
-                      :cy="getWalkboxCenter(wb).y * zoom - 60"
-                      r="8"
-                      class="walkbox-rotate-handle"
-                      @mousedown.stop="startWalkboxRotate($event, wb)"
-                    />
-                  </template>
-
-                  <!-- Label -->
-                  <text
-                    :x="getWalkboxCenter(wb).x * zoom"
-                    :y="getWalkboxCenter(wb).y * zoom"
-                    class="walkbox-label"
-                  >
-                    Walkbox #{{ wb.id }}
-                  </text>
-                </g>
-              </svg>
+                :walkboxes="currentScene.walkboxes"
+                :zoom="zoom"
+                :selected-elements="selectedElements"
+                :scene-width="currentScene.width"
+                :scene-height="currentScene.height"
+                @select="(wb, event) => handleSelectElement('walkbox', wb, event)"
+                @add-vertex="(wb, idx, event) => addWalkboxVertex(wb, idx, event)"
+                @start-vertex-drag="(event, wb, idx) => startVertexDrag(event, wb, idx)"
+                @remove-vertex="(wb, idx) => removeWalkboxVertex(wb, idx)"
+                @start-rotate="(event, wb) => startWalkboxRotate(event, wb)"
+              />
 
               <!-- Canvas Elements (Exits, Actors, Hotspots, Images, Z-Planes, Particles, Lights) -->
               <CanvasElements
@@ -2353,90 +2288,19 @@ onUnmounted(() => {
         </div>
 
         <!-- Play Mode UI Overlay -->
-        <div v-if="playMode" class="play-mode-overlay">
-          <!-- Fade Overlay for Transitions -->
-          <div
-            v-if="playModeState.fadeOverlay > 0"
-            class="fade-overlay"
-            :style="{ opacity: playModeState.fadeOverlay }"
-          ></div>
-
-          <!-- Exit Play Mode Button -->
-          <button class="exit-play-btn" @click="exitPlayMode">✕ EXIT PLAY MODE</button>
-
-          <!-- Cutscene Skip Button -->
-          <button
-            v-if="playModeState.isCutscenePlaying && playModeState.currentCutscene?.skippable"
-            class="skip-cutscene-btn"
-            @click="skipCutscene"
-          >
-            SKIP ▶▶
-          </button>
-
-          <!-- Cutscene Indicator -->
-          <div v-if="playModeState.isCutscenePlaying" class="cutscene-indicator">
-            🎬 CUTSCENE
-          </div>
-
-          <!-- Dialog Box -->
-          <div v-if="playModeState.currentDialog && getCurrentDialogLine" class="dialog-box" @click="advanceDialog">
-            <div class="dialog-speaker">{{ getCurrentDialogLine.speaker || 'Unknown' }}</div>
-            <div class="dialog-text">{{ getCurrentDialogLine.text }}</div>
-            <div class="dialog-hint">Click to continue...</div>
-          </div>
-
-          <!-- Selected Item Indicator -->
-          <div v-if="playModeState.selectedItem" class="selected-item-indicator">
-            Using: {{ project.globalData.items.find(i => i.id === playModeState.selectedItem)?.name }}
-            <button class="cancel-item-btn" @click="playModeState.selectedItem = null">✕</button>
-          </div>
-
-          <!-- Verb Bar -->
-          <div class="verb-bar" v-if="!playModeState.isCutscenePlaying">
-            <button
-              v-for="verb in project.globalData.verbs"
-              :key="verb.id"
-              class="verb-btn"
-              :class="{ active: playModeState.selectedVerb === verb.id }"
-              @click="selectVerb(verb.id)"
-            >
-              {{ verb.icon || '' }} {{ verb.name }}
-            </button>
-          </div>
-
-          <!-- Inventory Bar -->
-          <div class="inventory-bar" v-if="!playModeState.isCutscenePlaying">
-            <div class="inventory-label">INVENTORY</div>
-            <div class="inventory-slots" v-if="getInventoryItems.length > 0">
-              <div
-                v-for="item in getInventoryItems"
-                :key="item.id"
-                class="inventory-slot"
-                :class="{ selected: playModeState.selectedItem === item.id }"
-                :title="item.name"
-                @click="selectInventoryItem(item.id)"
-              >
-                <div
-                  v-if="item.iconAssetId && getAssetById(item.iconAssetId)"
-                  class="item-icon"
-                  :style="{ backgroundImage: getAssetDisplayUrl(getAssetById(item.iconAssetId)) ? `url(${getAssetDisplayUrl(getAssetById(item.iconAssetId))})` : 'none' }"
-                ></div>
-                <span v-else class="item-name">{{ item.name.substring(0, 3) }}</span>
-              </div>
-            </div>
-            <div v-else class="inventory-empty">Empty</div>
-          </div>
-
-          <!-- Hovered Object Name -->
-          <div v-if="playModeState.hoveredObject && !playModeState.isCutscenePlaying" class="hovered-object-name">
-            {{ playModeState.selectedItem ? 'Use with: ' : '' }}{{ playModeState.hoveredObject.name }}
-          </div>
-
-          <!-- Current Music Indicator -->
-          <div v-if="playModeState.currentMusic" class="music-indicator">
-            🎵 {{ getAudioAssetById(playModeState.currentMusic.audioAssetId)?.name || 'Playing' }}
-          </div>
-        </div>
+        <PlayModeOverlay
+          v-if="playMode"
+          :play-mode-state="playModeState"
+          :verbs="project.globalData.verbs"
+          :inventory-items="inventoryItemsWithUrls"
+          :current-music-name="currentMusicName"
+          @exit="exitPlayMode"
+          @skip-cutscene="skipCutscene"
+          @advance-dialog="advanceDialog"
+          @select-verb="selectVerb"
+          @select-item="selectInventoryItem"
+          @cancel-item="handleCancelItem"
+        />
 
         <!-- Zoom controls (from useCanvasZoom composable) -->
         <div class="zoom-controls">

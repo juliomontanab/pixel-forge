@@ -23,6 +23,15 @@ const props = defineProps({
   selectedElements: {
     type: Array,
     default: () => []
+  },
+  // Scene dimensions for SVG size
+  sceneWidth: {
+    type: Number,
+    default: 1920
+  },
+  sceneHeight: {
+    type: Number,
+    default: 1200
   }
 })
 
@@ -99,28 +108,9 @@ const handleRotateStart = (event, wb) => {
   emit('start-rotate', event, wb)
 }
 
-// Computed: SVG dimensions
-const svgWidth = computed(() => {
-  // Find max x from all walkboxes
-  let maxX = 0
-  props.walkboxes.forEach(wb => {
-    wb.points?.forEach(p => {
-      if (p.x > maxX) maxX = p.x
-    })
-  })
-  return (maxX + 100) * props.zoom
-})
-
-const svgHeight = computed(() => {
-  // Find max y from all walkboxes
-  let maxY = 0
-  props.walkboxes.forEach(wb => {
-    wb.points?.forEach(p => {
-      if (p.y > maxY) maxY = p.y
-    })
-  })
-  return (maxY + 100) * props.zoom
-})
+// Computed: SVG dimensions (use scene dimensions)
+const svgWidth = computed(() => props.sceneWidth * props.zoom)
+const svgHeight = computed(() => props.sceneHeight * props.zoom)
 </script>
 
 <template>
