@@ -9,7 +9,7 @@ import { useKeyboardShortcuts, createEditorShortcuts } from '@/composables/useKe
 import { useElementSelection } from '@/composables/useElementSelection'
 import { usePanelState } from '@/composables/usePanelState'
 import { useCanvasZoom } from '@/composables/useCanvasZoom'
-import { useParticleSystem, particlePresets } from '@/composables/useParticleSystem'
+import { useParticleSystem, particlePresets, parseColor } from '@/composables/useParticleSystem'
 import { useLighting, lightTypes } from '@/composables/useLighting'
 import { useAudioPlayback } from '@/composables/useAudioPlayback'
 import { useElementCRUD } from '@/composables/useElementCRUD'
@@ -857,6 +857,34 @@ const changeSceneWithTransition = (sceneId) => {
   })
 }
 
+// Initialize particle system composable
+const {
+  activeParticles,
+  getParticleStyle,
+  updateParticles,
+  startParticleLoop: startParticleLoopFromComposable,
+  stopParticleLoop,
+  applyParticlePreset,
+  getParticleIcon,
+  clearParticles,
+  startResizeParticle
+} = useParticleSystem({
+  currentScene,
+  zoom
+})
+
+// Initialize lighting composable
+const {
+  getLightIcon,
+  getLightPreviewStyle,
+  getLightingGradient,
+  createLight,
+  createDefaultLighting
+} = useLighting({
+  currentScene,
+  zoom
+})
+
 // =====================
 // PLAY MODE - INTERACTION HANDLERS
 // =====================
@@ -1376,216 +1404,15 @@ watch(playMode, (isPlaying) => {
 // Actor preview frames (for canvas animation)
 const actorPreviewFrames = ref({}) // { actorId: frameIndex }
 
-// Light types imported from useLighting composable
-// Particle presets imported from useParticleSystem composable
+// Particle and lighting functions from composables:
+// - activeParticles, getParticleStyle, updateParticles, startResizeParticle from useParticleSystem
+// - getLightPreviewStyle, getLightingGradient, getLightIcon from useLighting
+// - parseColor from useParticleSystem
 
-// Particle system state for preview
-const activeParticles = ref({}) // { emitterId: [{ x, y, vx, vy, life, maxLife, size, color }] }
+// Custom particle animation loop (wraps composable's updateParticles with parallax updates)
 let particleAnimationFrame = null
 let lastParticleTime = 0
 
-// Get particle style for rendering
-const getParticleStyle = (particle, emitter) => {
-  const progress = 1 - (particle.life / particle.maxLife)
-  const currentSize = particle.size.start + (particle.size.end - particle.size.start) * progress
-
-  // Interpolate color
-  const startColor = parseColor(particle.color.start)
-  const endColor = parseColor(particle.color.end)
-  const r = Math.round(startColor.r + (endColor.r - startColor.r) * progress)
-  const g = Math.round(startColor.g + (endColor.g - startColor.g) * progress)
-  const b = Math.round(startColor.b + (endColor.b - startColor.b) * progress)
-  const a = startColor.a + (endColor.a - startColor.a) * progress
-
-  return {
-    position: 'absolute',
-    left: particle.x * zoom.value + 'px',
-    top: particle.y * zoom.value + 'px',
-    width: currentSize * zoom.value + 'px',
-    height: emitter.shape === 'line' ? (currentSize * 4) * zoom.value + 'px' : currentSize * zoom.value + 'px',
-    backgroundColor: `rgba(${r}, ${g}, ${b}, ${a})`,
-    borderRadius: emitter.shape === 'circle' ? '50%' : emitter.shape === 'star' ? '0' : '0',
-    transform: emitter.shape === 'star' ? 'rotate(45deg)' : 'none',
-    pointerEvents: 'none'
-  }
-}
-
-// Parse hex color to RGBA
-const parseColor = (hex) => {
-  const result = { r: 255, g: 255, b: 255, a: 1 }
-  if (!hex) return result
-
-  // Remove # if present
-  hex = hex.replace('#', '')
-
-  if (hex.length === 6) {
-    result.r = parseInt(hex.slice(0, 2), 16)
-    result.g = parseInt(hex.slice(2, 4), 16)
-    result.b = parseInt(hex.slice(4, 6), 16)
-    result.a = 1
-  } else if (hex.length === 8) {
-    result.r = parseInt(hex.slice(0, 2), 16)
-    result.g = parseInt(hex.slice(2, 4), 16)
-    result.b = parseInt(hex.slice(4, 6), 16)
-    result.a = parseInt(hex.slice(6, 8), 16) / 255
-  }
-
-  return result
-}
-
-// Get light preview style (glow around light icon)
-const getLightPreviewStyle = (light) => {
-  const size = light.type === 'point' || light.type === 'spot' ? light.radius * 2 : 200
-  return {
-    width: size * zoom.value + 'px',
-    height: size * zoom.value + 'px',
-    background: `radial-gradient(circle, ${light.color}66 0%, transparent 70%)`,
-    transform: 'translate(-50%, -50%)',
-    left: '50%',
-    top: '50%',
-    position: 'absolute',
-    pointerEvents: 'none',
-    opacity: light.intensity
-  }
-}
-
-// Get lighting gradient for the overlay
-const getLightingGradient = () => {
-  if (!currentScene.value.lighting) return 'transparent'
-
-  const ambient = currentScene.value.lighting.ambient
-  const lights = currentScene.value.lighting.lights.filter(l => l.enabled)
-
-  if (lights.length === 0) {
-    // Just ambient darkness
-    return ambient.color
-  }
-
-  // Create a CSS gradient with light sources
-  // Note: This is a simplified 2D representation
-  const gradients = lights.map(light => {
-    const x = (light.x / currentScene.value.width) * 100
-    const y = (light.y / currentScene.value.height) * 100
-    const radius = light.type === 'directional' ? 100 : (light.radius / Math.max(currentScene.value.width, currentScene.value.height)) * 100
-
-    return `radial-gradient(circle at ${x}% ${y}%, transparent 0%, transparent ${radius * 0.5}%, ${ambient.color}88 ${radius}%)`
-  })
-
-  return gradients.join(', ')
-}
-
-// Particle emitter resize
-const startResizeParticle = (event, emitter, direction) => {
-  event.preventDefault()
-  const startX = event.clientX
-  const startY = event.clientY
-  const startWidth = emitter.width
-  const startHeight = emitter.height
-  const startEmitterX = emitter.x
-  const startEmitterY = emitter.y
-
-  const onMouseMove = (e) => {
-    const dx = (e.clientX - startX) / zoom.value
-    const dy = (e.clientY - startY) / zoom.value
-
-    let newWidth = startWidth
-    let newHeight = startHeight
-    let newX = startEmitterX
-    let newY = startEmitterY
-
-    if (direction.includes('e')) newWidth = Math.max(10, startWidth + dx * 2)
-    if (direction.includes('w')) newWidth = Math.max(10, startWidth - dx * 2)
-    if (direction.includes('s')) newHeight = Math.max(10, startHeight + dy * 2)
-    if (direction.includes('n')) newHeight = Math.max(10, startHeight - dy * 2)
-
-    emitter.width = newWidth
-    emitter.height = newHeight
-  }
-
-  const onMouseUp = () => {
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-  }
-
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-}
-
-// Update particle system
-const updateParticles = (deltaTime) => {
-  if (!currentScene.value.particles) return
-
-  currentScene.value.particles.forEach(emitter => {
-    if (!emitter.enabled) {
-      activeParticles.value[emitter.id] = []
-      return
-    }
-
-    // Initialize particle array if needed
-    if (!activeParticles.value[emitter.id]) {
-      activeParticles.value[emitter.id] = []
-    }
-
-    const particles = activeParticles.value[emitter.id]
-
-    // Emit new particles
-    const emitCount = emitter.emitRate * deltaTime
-    for (let i = 0; i < emitCount; i++) {
-      if (Math.random() < emitCount - Math.floor(emitCount) || i < Math.floor(emitCount)) {
-        // Random position within emission area
-        const px = emitter.x + (Math.random() - 0.5) * emitter.width
-        const py = emitter.y + (Math.random() - 0.5) * emitter.height
-
-        // Random direction and speed
-        const dir = (emitter.direction.min + Math.random() * (emitter.direction.max - emitter.direction.min)) * Math.PI / 180
-        const speed = emitter.speed.min + Math.random() * (emitter.speed.max - emitter.speed.min)
-        const vx = Math.sin(dir) * speed
-        const vy = -Math.cos(dir) * speed
-
-        // Random lifetime
-        const lifetime = emitter.lifetime.min + Math.random() * (emitter.lifetime.max - emitter.lifetime.min)
-
-        particles.push({
-          x: px,
-          y: py,
-          vx,
-          vy,
-          life: lifetime,
-          maxLife: lifetime,
-          size: { start: emitter.size.start, end: emitter.size.end },
-          color: { start: emitter.color.start, end: emitter.color.end }
-        })
-      }
-    }
-
-    // Update existing particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i]
-
-      // Apply velocity
-      p.x += p.vx * deltaTime
-      p.y += p.vy * deltaTime
-
-      // Apply gravity
-      p.vy += emitter.gravity * deltaTime
-
-      // Decrease lifetime
-      p.life -= deltaTime
-
-      // Remove dead particles
-      if (p.life <= 0) {
-        particles.splice(i, 1)
-      }
-    }
-
-    // Limit max particles
-    if (particles.length > 500) {
-      particles.splice(0, particles.length - 500)
-    }
-  })
-}
-
-// Particle animation loop
 const startParticleLoop = () => {
   lastParticleTime = performance.now()
 
@@ -1600,13 +1427,6 @@ const startParticleLoop = () => {
   }
 
   particleAnimationFrame = requestAnimationFrame(loop)
-}
-
-const stopParticleLoop = () => {
-  if (particleAnimationFrame) {
-    cancelAnimationFrame(particleAnimationFrame)
-    particleAnimationFrame = null
-  }
 }
 
 // Panel state (collapsedSections, visibleTypes, toggleSection, toggleVisibility) from usePanelState composable
@@ -3512,33 +3332,6 @@ const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-// Get light icon by type
-const getLightIcon = (type) => {
-  const found = lightTypes.find(lt => lt.id === type)
-  return found ? found.icon : '💡'
-}
-
-// Get particle icon by preset
-const getParticleIcon = (preset) => {
-  return particlePresets[preset]?.icon || '✨'
-}
-
-// Apply particle preset
-const applyParticlePreset = (emitter, presetName) => {
-  const preset = particlePresets[presetName]
-  if (!preset) return
-
-  emitter.preset = presetName
-  emitter.emitRate = preset.emitRate
-  emitter.lifetime = { ...preset.lifetime }
-  emitter.speed = { ...preset.speed }
-  emitter.direction = { ...preset.direction }
-  emitter.gravity = preset.gravity
-  emitter.size = { ...preset.size }
-  emitter.color = { ...preset.color }
-  emitter.shape = preset.shape
 }
 
 // Delete selected light
