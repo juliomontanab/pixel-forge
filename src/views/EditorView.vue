@@ -3150,6 +3150,11 @@ const onAssetDrop = (event) => {
   }
 }
 
+// Handle asset upload files (for AssetManagerModal)
+const handleAssetUploadFiles = (files) => {
+  files.forEach(handleAssetUpload)
+}
+
 // Handle asset drag start (for moving between folders)
 const handleAssetDragStart = (event, asset) => {
   event.dataTransfer.setData('application/json', JSON.stringify({
@@ -3254,6 +3259,19 @@ const onAudioDrop = (event) => {
   const files = event.dataTransfer.files
   if (files) {
     Array.from(files).forEach(handleAudioUpload)
+  }
+}
+
+// Handle audio upload files (for AudioManagerModal)
+const handleAudioUploadFiles = (files) => {
+  files.forEach(handleAudioUpload)
+}
+
+// Update audio asset field (for AudioManagerModal)
+const updateAudioAssetField = (audioId, field, value) => {
+  const audio = project.value.globalData.audioAssets.find(a => a.id === audioId)
+  if (audio) {
+    audio[field] = value
   }
 }
 
@@ -5135,341 +5153,45 @@ onUnmounted(() => {
     />
 
     <!-- Asset Manager Modal -->
-    <div v-if="showAssetManagerModal" class="modal-overlay asset-manager-overlay" @click.self="showAssetManagerModal = false">
-      <div class="modal-content asset-manager-modal asset-manager-with-folders">
-        <header class="modal-header">
-          <h3>🖼️ Asset Manager</h3>
-          <button class="modal-close-btn" @click="showAssetManagerModal = false">✕</button>
-        </header>
-        <div class="modal-body asset-manager-body-with-sidebar">
-          <!-- Folder Sidebar -->
-          <div class="asset-folder-sidebar">
-            <div class="folder-sidebar-header">
-              <span class="folder-sidebar-title">Carpetas</span>
-              <button
-                class="folder-add-btn"
-                @click="showNewFolderInput = !showNewFolderInput"
-                title="Nueva carpeta"
-              >+</button>
-            </div>
-
-            <!-- New Folder Input -->
-            <div v-if="showNewFolderInput" class="new-folder-input-row">
-              <input
-                type="text"
-                v-model="newFolderName"
-                class="new-folder-input"
-                placeholder="Nombre..."
-                @keyup.enter="createAssetFolder(newFolderName, selectedAssetFolder); showNewFolderInput = false"
-                @keyup.escape="showNewFolderInput = false; newFolderName = ''"
-                ref="newFolderInput"
-              />
-              <button class="new-folder-ok-btn" @click="createAssetFolder(newFolderName, selectedAssetFolder); showNewFolderInput = false">✓</button>
-              <button class="new-folder-cancel-btn" @click="showNewFolderInput = false; newFolderName = ''">✕</button>
-            </div>
-
-            <!-- Folder Tree -->
-            <div class="folder-tree">
-              <!-- Root Folder -->
-              <div
-                class="folder-item"
-                :class="{ selected: selectedAssetFolder === '/' }"
-                @click="selectAssetFolder('/')"
-                @dragover.prevent
-                @drop.prevent="handleFolderDrop($event, '/')"
-              >
-                <span class="folder-icon">📁</span>
-                <span class="folder-name">Raíz</span>
-                <span class="folder-count">({{ getFolderAssetCount('/', false) }})</span>
-              </div>
-
-              <!-- Recursive Folder Tree Component (inline) -->
-              <template v-for="folder in assetFolderTree.children" :key="folder.id">
-                <div
-                  class="folder-item folder-child"
-                  :class="{ selected: selectedAssetFolder === folder.path }"
-                  :style="{ paddingLeft: '20px' }"
-                  @click="selectAssetFolder(folder.path)"
-                  @dragover.prevent
-                  @drop.prevent="handleFolderDrop($event, folder.path)"
-                >
-                  <span class="folder-icon">{{ folder.icon || '📁' }}</span>
-                  <template v-if="renamingFolderId === folder.id">
-                    <input
-                      type="text"
-                      v-model="renamingFolderValue"
-                      class="folder-rename-input"
-                      @keyup.enter="renameAssetFolder(folder.id, renamingFolderValue)"
-                      @keyup.escape="cancelRenamingFolder"
-                      @blur="renameAssetFolder(folder.id, renamingFolderValue)"
-                      @click.stop
-                      autofocus
-                    />
-                  </template>
-                  <template v-else>
-                    <span class="folder-name" @dblclick.stop="startRenamingFolder(folder)">{{ folder.name }}</span>
-                    <span class="folder-count">({{ getFolderAssetCount(folder.path, true) }})</span>
-                    <div class="folder-actions">
-                      <button class="folder-action-btn" @click.stop="startRenamingFolder(folder)" title="Renombrar">✏️</button>
-                      <button class="folder-action-btn" @click.stop="deleteAssetFolder(folder.id)" title="Eliminar">🗑️</button>
-                    </div>
-                  </template>
-                </div>
-
-                <!-- Nested subfolders (one level for simplicity) -->
-                <template v-for="subfolder in folder.children" :key="subfolder.id">
-                  <div
-                    class="folder-item folder-child"
-                    :class="{ selected: selectedAssetFolder === subfolder.path }"
-                    :style="{ paddingLeft: '40px' }"
-                    @click="selectAssetFolder(subfolder.path)"
-                    @dragover.prevent
-                    @drop.prevent="handleFolderDrop($event, subfolder.path)"
-                  >
-                    <span class="folder-icon">{{ subfolder.icon || '📁' }}</span>
-                    <template v-if="renamingFolderId === subfolder.id">
-                      <input
-                        type="text"
-                        v-model="renamingFolderValue"
-                        class="folder-rename-input"
-                        @keyup.enter="renameAssetFolder(subfolder.id, renamingFolderValue)"
-                        @keyup.escape="cancelRenamingFolder"
-                        @blur="renameAssetFolder(subfolder.id, renamingFolderValue)"
-                        @click.stop
-                      />
-                    </template>
-                    <template v-else>
-                      <span class="folder-name" @dblclick.stop="startRenamingFolder(subfolder)">{{ subfolder.name }}</span>
-                      <span class="folder-count">({{ getFolderAssetCount(subfolder.path, true) }})</span>
-                      <div class="folder-actions">
-                        <button class="folder-action-btn" @click.stop="startRenamingFolder(subfolder)" title="Renombrar">✏️</button>
-                        <button class="folder-action-btn" @click.stop="deleteAssetFolder(subfolder.id)" title="Eliminar">🗑️</button>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </template>
-            </div>
-
-            <!-- Include subfolders toggle -->
-            <label class="subfolder-toggle">
-              <input type="checkbox" v-model="showSubfolderContents" />
-              <span>Incluir subcarpetas</span>
-            </label>
-          </div>
-
-          <!-- Main Content Area -->
-          <div class="asset-main-content">
-            <!-- Category Selector -->
-            <div class="asset-category-selector">
-              <label class="category-label">Subir como:</label>
-              <div class="category-buttons">
-                <button
-                  v-for="cat in ASSET_CATEGORIES.image"
-                  :key="cat"
-                  class="category-btn"
-                  :class="{ active: selectedAssetCategory === cat }"
-                  @click="selectedAssetCategory = cat"
-                >
-                  {{ categoryLabels.image[cat] }}
-                </button>
-              </div>
-              <span class="upload-folder-hint">en {{ selectedAssetFolder === '/' ? 'Raíz' : selectedAssetFolder }}</span>
-            </div>
-
-            <!-- Upload Zone -->
-            <div
-              class="asset-upload-zone"
-              :class="{ dragging: assetUploadDragging, uploading: isUploading }"
-              @dragover="onAssetDragOver"
-              @dragleave="onAssetDragLeave"
-              @drop="onAssetDrop"
-              @click="!isUploading && $refs.assetFileInput.click()"
-            >
-              <input
-                ref="assetFileInput"
-                type="file"
-                accept="image/*"
-                multiple
-                style="display: none"
-                @change="onAssetFileChange"
-                :disabled="isUploading"
-              />
-              <div v-if="isUploading" class="upload-zone-content uploading">
-                <span class="upload-icon">⏳</span>
-                <span class="upload-text">Subiendo a S3...</span>
-                <div class="upload-progress-bar">
-                  <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
-                </div>
-                <span class="upload-hint">{{ uploadProgress }}%</span>
-              </div>
-              <div v-else class="upload-zone-content">
-                <span class="upload-icon">📁</span>
-                <span class="upload-text">Arrastra imágenes aquí o haz clic</span>
-                <span class="upload-hint">PNG, JPG, GIF soportados (max 10MB)</span>
-              </div>
-            </div>
-
-            <!-- Filter & Search Bar -->
-            <div class="asset-filter-bar">
-              <div class="filter-tabs">
-                <button
-                  class="filter-tab"
-                  :class="{ active: assetFilterCategory === 'all' }"
-                  @click="assetFilterCategory = 'all'"
-                >
-                  Todas ({{ assetCountByCategory.all }})
-                </button>
-                <button
-                  v-for="cat in ASSET_CATEGORIES.image"
-                  :key="cat"
-                  class="filter-tab"
-                  :class="{ active: assetFilterCategory === cat }"
-                  @click="assetFilterCategory = cat"
-                >
-                  {{ categoryLabels.image[cat] }} ({{ assetCountByCategory[cat] || 0 }})
-                </button>
-              </div>
-              <input
-                type="text"
-                v-model="assetSearchQuery"
-                class="asset-search-input"
-                placeholder="🔍 Buscar..."
-              />
-            </div>
-
-            <!-- Asset Grid -->
-            <div class="asset-grid">
-              <div
-                v-for="asset in filteredAssets"
-                :key="asset.id"
-                class="asset-grid-item"
-                :class="{ 's3-asset': asset.s3Key }"
-                draggable="true"
-                @dragstart="handleAssetDragStart($event, asset)"
-              >
-                <div
-                  class="asset-preview"
-                  :style="{ backgroundImage: getAssetDisplayUrl(asset) ? `url(${getAssetDisplayUrl(asset)})` : 'none' }"
-                >
-                  <span v-if="!getAssetDisplayUrl(asset)" class="asset-loading">⏳</span>
-                  <span v-if="asset.s3Key" class="s3-badge" title="Almacenado en S3">☁️</span>
-                </div>
-                <div class="asset-info">
-                  <input
-                    type="text"
-                    v-model="asset.name"
-                    class="asset-name-input"
-                    @click.stop
-                    @blur="autoSaveProject"
-                  />
-                  <div class="asset-meta">
-                    <span class="asset-size">{{ asset.width }}×{{ asset.height }}</span>
-                    <span v-if="asset.category" class="asset-category-badge">{{ asset.category }}</span>
-                  </div>
-                  <div class="asset-folder-path" v-if="asset.folderPath && asset.folderPath !== '/'">
-                    📂 {{ asset.folderPath }}
-                  </div>
-                </div>
-                <button class="asset-delete-btn" @click.stop="deleteAsset(asset.id)" title="Eliminar asset">🗑️</button>
-              </div>
-              <p v-if="project.globalData.assets.length === 0" class="empty-assets">
-                No hay assets subidos. Arrastra imágenes arriba para comenzar.
-              </p>
-              <p v-else-if="filteredAssets.length === 0" class="empty-assets">
-                No hay assets que coincidan con el filtro.
-              </p>
-            </div>
-          </div>
-        </div>
-        <footer class="modal-footer">
-          <span class="asset-count">
-            {{ filteredAssets.length }} / {{ project.globalData.assets.length }} assets
-          </span>
-          <button class="modal-btn" @click="showAssetManagerModal = false">Listo</button>
-        </footer>
-      </div>
-    </div>
+    <AssetManagerModal
+      v-model:show="showAssetManagerModal"
+      :assets="project.globalData.assets"
+      :folders="project.globalData.assetFolders"
+      :folder-tree="assetFolderTree"
+      :selected-folder="selectedAssetFolder"
+      :filter-category="assetFilterCategory"
+      :search-query="assetSearchQuery"
+      :upload-category="selectedAssetCategory"
+      :is-uploading="isUploading"
+      :upload-progress="uploadProgress"
+      :categories="ASSET_CATEGORIES.image"
+      :category-labels="categoryLabels.image"
+      :get-asset-url="getAssetDisplayUrl"
+      :show-subfolders="showSubfolderContents"
+      @update:selected-folder="selectAssetFolder"
+      @update:filter-category="assetFilterCategory = $event"
+      @update:search-query="assetSearchQuery = $event"
+      @update:upload-category="selectedAssetCategory = $event"
+      @update:show-subfolders="showSubfolderContents = $event"
+      @create-folder="createAssetFolder"
+      @rename-folder="renameAssetFolder"
+      @delete-folder="deleteAssetFolder"
+      @upload-files="handleAssetUploadFiles"
+      @delete-asset="deleteAsset"
+      @move-asset="moveAssetToFolder"
+    />
 
     <!-- Audio Manager Modal -->
-    <div v-if="showAudioManagerModal" class="modal-overlay audio-manager-overlay" @click.self="showAudioManagerModal = false; stopAudioPreview()">
-      <div class="modal-content audio-manager-modal">
-        <header class="modal-header">
-          <h3>🔊 Audio Manager</h3>
-          <button class="modal-close-btn" @click="showAudioManagerModal = false; stopAudioPreview()">✕</button>
-        </header>
-        <div class="modal-body audio-manager-body">
-          <!-- Upload Zone -->
-          <div
-            class="audio-upload-zone"
-            :class="{ dragging: audioUploadDragging }"
-            @dragover="onAudioDragOver"
-            @dragleave="onAudioDragLeave"
-            @drop="onAudioDrop"
-            @click="$refs.audioFileInput.click()"
-          >
-            <input
-              ref="audioFileInput"
-              type="file"
-              accept="audio/*"
-              multiple
-              style="display: none"
-              @change="onAudioFileChange"
-            />
-            <div class="upload-zone-content">
-              <span class="upload-icon">🎵</span>
-              <span class="upload-text">Drop audio files here or click to browse</span>
-              <span class="upload-hint">MP3, WAV, OGG supported</span>
-            </div>
-          </div>
-
-          <!-- Audio List -->
-          <div class="audio-list">
-            <div
-              v-for="audio in project.globalData.audioAssets"
-              :key="audio.id"
-              class="audio-list-item"
-              :class="{ playing: currentlyPlayingAudio?.id === audio.id }"
-            >
-              <div class="audio-item-main">
-                <button
-                  class="audio-play-btn-large"
-                  @click.stop="currentlyPlayingAudio?.id === audio.id ? stopAudioPreview() : playAudioPreview(audio)"
-                >
-                  {{ currentlyPlayingAudio?.id === audio.id ? '⏹' : '▶' }}
-                </button>
-                <div class="audio-item-info">
-                  <input
-                    type="text"
-                    v-model="audio.name"
-                    class="audio-name-input"
-                    @click.stop
-                  />
-                  <div class="audio-meta">
-                    <span class="audio-format">{{ audio.format?.toUpperCase() }}</span>
-                    <span class="audio-duration-tag">{{ formatDuration(audio.duration) }}</span>
-                  </div>
-                </div>
-                <div class="audio-type-selector">
-                  <select v-model="audio.type" class="audio-type-select" @click.stop>
-                    <option value="sfx">SFX</option>
-                    <option value="music">Music</option>
-                  </select>
-                </div>
-                <button class="audio-delete-btn" @click.stop="deleteAudioAsset(audio.id)" title="Delete audio">🗑️</button>
-              </div>
-            </div>
-            <p v-if="project.globalData.audioAssets.length === 0" class="empty-audio">
-              No audio files uploaded yet. Drop audio files above to get started.
-            </p>
-          </div>
-        </div>
-        <footer class="modal-footer">
-          <span class="audio-count">{{ project.globalData.audioAssets.length }} audio files</span>
-          <button class="modal-btn" @click="showAudioManagerModal = false; stopAudioPreview()">Done</button>
-        </footer>
-      </div>
-    </div>
+    <AudioManagerModal
+      v-model:show="showAudioManagerModal"
+      :audio-assets="project.globalData.audioAssets"
+      :currently-playing-id="currentlyPlayingAudio?.id"
+      @upload-files="handleAudioUploadFiles"
+      @delete-audio="deleteAudioAsset"
+      @play-audio="playAudioPreview"
+      @stop-audio="stopAudioPreview"
+      @update-audio="updateAudioAssetField"
+    />
 
     <!-- Spritesheet Editor Modal -->
     <SpritesheetEditorModal
