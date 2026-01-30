@@ -21,6 +21,7 @@ export { useUndoRedo } from './useUndoRedo'
 export { useKeyboardShortcuts, createEditorShortcuts } from './useKeyboardShortcuts'
 export { useElementSelection } from './useElementSelection'
 export { useElementCRUD } from './useElementCRUD'
+export { useElementFactory, createDefaultElement, getElementTargetArray, ELEMENT_TARGETS } from './useElementFactory'
 export { useCanvasZoom } from './useCanvasZoom'
 export { usePanelState } from './usePanelState'
 export {

@@ -13,6 +13,7 @@ import { useParticleSystem, particlePresets, parseColor } from '@/composables/us
 import { useLighting, lightTypes } from '@/composables/useLighting'
 import { useAudioPlayback } from '@/composables/useAudioPlayback'
 import { useElementCRUD } from '@/composables/useElementCRUD'
+import { createDefaultElement as createElementWithDefaults, getElementTargetArray } from '@/composables/useElementFactory'
 import { usePlayMode } from '@/composables/usePlayMode'
 import { useCutsceneEngine } from '@/composables/useCutsceneEngine'
 import { useContextMenu } from '@/composables/useContextMenu'
@@ -1056,6 +1057,12 @@ const {
   autoSaveProject
 })
 
+// Handler for BackgroundScaleModal confirm
+const handleBackgroundScaleConfirm = (mode) => {
+  backgroundScaleMode.value = mode
+  scaleBackgroundToCanvas()
+}
+
 // Initialize AI panel composable
 const {
   aiPanelOpen,
@@ -1354,231 +1361,15 @@ const resetVerbsToDefault = () => {
 }
 
 const handleAddElement = (type) => {
-  const newElement = {
-    id: Date.now(),
-    name: `New ${type}`,
-    x: DEFAULT_WIDTH / 2 - 100,
-    y: DEFAULT_HEIGHT / 2 - 100,
-    w: 200,
-    h: 200,
-    rotation: 0
-  }
+  // Create element with factory defaults
+  const newElement = createElementWithDefaults(type, DEFAULT_WIDTH, DEFAULT_HEIGHT)
 
-  switch (type) {
-    case 'image':
-      currentScene.value.images.push({
-        ...newElement,
-        src: null,
-        assetId: null,
-        zOrder: 0,
-        interactive: false,
-        pickable: false,
-        description: '', // Texto por defecto al mirar
-        interactions: [], // { verbId, action, params }
-        folderPath: '/', // Organización por carpetas
-        // Parallax properties
-        parallax: {
-          enabled: false,
-          depth: 1.0,       // 0=fixed, <1=background(slow), 1=normal, >1=foreground(fast)
-          repeatX: false,   // Tile horizontally
-          repeatY: false,   // Tile vertically
-          autoScrollX: 0,   // Auto-scroll speed X (px/sec)
-          autoScrollY: 0    // Auto-scroll speed Y (px/sec)
-        }
-      })
-      break
-    case 'walkbox':
-      currentScene.value.walkboxes.push({
-        id: Date.now(),
-        name: 'New walkbox',
-        points: [
-          {x: DEFAULT_WIDTH/2 - 200, y: DEFAULT_HEIGHT - 300},
-          {x: DEFAULT_WIDTH/2 + 200, y: DEFAULT_HEIGHT - 300},
-          {x: DEFAULT_WIDTH/2 + 200, y: DEFAULT_HEIGHT - 100},
-          {x: DEFAULT_WIDTH/2 - 200, y: DEFAULT_HEIGHT - 100}
-        ],
-        rotation: 0,
-        mask: 0
-      })
-      break
-    case 'exit':
-      currentScene.value.exits.push({ ...newElement, targetScene: '' })
-      break
-    case 'actor':
-      currentScene.value.actors.push({
-        ...newElement,
-        costume: null,
-        direction: 'south',
-        animations: {
-          idle: null,
-          'walk-north': null,
-          'walk-south': null,
-          'walk-east': null,
-          'walk-west': null,
-          'talk': null
-        },
-        currentState: 'idle'
-      })
-      break
-    case 'hotspot':
-      currentScene.value.hotspots.push({
-        ...newElement,
-        description: '', // Texto por defecto al mirar
-        interactions: [], // { verbId, action, params }
-        folderPath: '/' // Organización por carpetas
-      })
-      break
-    case 'zplane':
-      currentScene.value.zplanes.push({ ...newElement, maskImage: null, zIndex: 1 })
-      break
-    case 'dialog':
-      currentScene.value.dialogs.push({
-        id: Date.now(),
-        name: 'New Dialog',
-        actor: null,
-        lines: [
-          { id: 1, speaker: 'Player', text: 'Hello!' },
-          { id: 2, speaker: 'NPC', text: 'Hi there!' }
-        ],
-        choices: []
-      })
-      break
-    case 'puzzle':
-      currentScene.value.puzzles.push({
-        id: Date.now(),
-        name: 'New Puzzle',
-        description: '',
-        type: 'item-combination',
-        // Conditions (vary by type)
-        conditions: {
-          items: [],              // For item-combination: [itemId1, itemId2]
-          useItem: null,          // For use-on-object/actor: itemId to use
-          targetObject: null,     // For use-on-object: hotspot/image ID
-          targetActor: null,      // For use-on-actor: actor ID
-          sequence: [],           // For sequence: ['action1', 'action2']
-          dialogId: null,         // For dialog-choice: dialog ID
-          correctChoices: []      // For dialog-choice: [choiceId1, choiceId2]
-        },
-        // Result when solved
-        result: {
-          type: 'none',           // none, give-item, remove-item, unlock-exit, play-cutscene, change-state, show-dialog
-          giveItem: null,         // Item ID to give
-          removeItems: [],        // Item IDs to remove/consume
-          unlockExit: null,       // Exit ID to unlock
-          playCutscene: null,     // Cutscene ID to play
-          changeState: null,      // { objectType, objectId, newState }
-          showDialog: null        // Dialog ID to show
-        },
-        // State
-        solved: false,
-        // Hints
-        hints: []                 // [{ afterAttempts: number, text: string }]
-      })
-      break
-    case 'verb':
-      project.value.globalData.verbs.push({
-        id: Date.now(),
-        name: 'New Verb',
-        icon: '❓',
-        key: ''
-      })
-      break
-    case 'sfx':
-      currentScene.value.sfx.push({
-        id: Date.now(),
-        name: 'New SFX',
-        file: null,
-        audioAssetId: null,
-        volume: 100,
-        loop: false,
-        trigger: 'manual'
-      })
-      break
-    case 'music':
-      currentScene.value.music.push({
-        id: Date.now(),
-        name: 'New Music',
-        file: null,
-        audioAssetId: null,
-        volume: 80,
-        loop: true,
-        fadeIn: 0,
-        fadeOut: 0
-      })
-      break
-    case 'cutscene':
-      currentScene.value.cutscenes.push({
-        id: Date.now(),
-        name: 'New Cutscene',
-        trigger: 'manual',
-        triggerTarget: null,
-        skippable: true,
-        actions: []
-      })
-      break
-    case 'item':
-      project.value.globalData.items.push({
-        id: Date.now(),
-        name: 'New Item',
-        description: 'A useful item',
-        icon: '📦',
-        iconAssetId: null,        // Asset ID for image-based icon
-        image: null,              // Optional: image data for inventory display
-        combinable: true,         // Can be combined with other items
-        useWith: [],              // Object types this item can be used on: ['hotspot', 'actor', 'exit']
-        pickupDialog: null,       // Dialog to show when picked up
-        examineDialog: null       // Dialog to show when examined
-      })
-      break
-    case 'light':
-      currentScene.value.lighting.lights.push({
-        id: Date.now(),
-        name: 'New Light',
-        type: 'point',            // point, spot, directional, area
-        x: DEFAULT_WIDTH / 2,
-        y: DEFAULT_HEIGHT / 2,
-        color: '#ffcc00',
-        intensity: 1.0,
-        radius: 300,              // for point/spot
-        angle: 45,                // for spot (cone angle in degrees)
-        direction: 180,           // for spot/directional (direction in degrees)
-        falloff: 'smooth',        // none, linear, smooth
-        enabled: true,
-        castShadows: false,
-        // Area light specific
-        width: 200,
-        height: 100
-      })
-      break
-    case 'particle':
-      const preset = particlePresets.fire
-      currentScene.value.particles.push({
-        id: Date.now(),
-        name: 'New Emitter',
-        preset: 'fire',
-        x: DEFAULT_WIDTH / 2,
-        y: DEFAULT_HEIGHT / 2,
-        width: 50,                // Emission area width
-        height: 10,               // Emission area height
-        enabled: true,
-        // Emission settings
-        emitRate: preset.emitRate,
-        // Particle lifetime
-        lifetime: { ...preset.lifetime },
-        // Movement
-        speed: { ...preset.speed },
-        direction: { ...preset.direction },
-        gravity: preset.gravity,
-        // Size
-        size: { ...preset.size },
-        // Color
-        color: { ...preset.color },
-        // Shape
-        shape: preset.shape,      // circle, square, star, line
-        // Blend mode
-        blendMode: 'screen'       // normal, screen, add, multiply
-      })
-      break
+  // Get target array and push element
+  const targetArray = getElementTargetArray(type, currentScene.value, project.value)
+  if (targetArray) {
+    targetArray.push(newElement)
+  } else {
+    console.warn(`[Editor] Unknown element type: ${type}`)
   }
 }
 
@@ -2727,69 +2518,16 @@ onUnmounted(() => {
   </div>
 
   <!-- Background Scale Modal -->
-  <div v-if="showBackgroundScaleModal" class="modal-overlay" @click.self="showBackgroundScaleModal = false">
-    <div class="background-scale-modal">
-      <h3 class="modal-title">📐 Ajustar Background al Canvas</h3>
-
-      <div class="scale-info">
-        <div class="scale-info-row">
-          <span class="info-label">Imagen actual:</span>
-          <span class="info-value">{{ currentBackgroundAsset?.width }}×{{ currentBackgroundAsset?.height }}px</span>
-        </div>
-        <div class="scale-info-row">
-          <span class="info-label">Canvas:</span>
-          <span class="info-value">{{ currentScene.width }}×{{ currentScene.height }}px</span>
-        </div>
-      </div>
-
-      <div class="scale-options">
-        <label class="scale-option" :class="{ active: backgroundScaleMode === 'cover' }">
-          <input type="radio" v-model="backgroundScaleMode" value="cover" />
-          <div class="option-content">
-            <span class="option-icon">🖼️</span>
-            <span class="option-name">Cubrir (Cover)</span>
-            <span class="option-desc">Llena todo el canvas, puede recortar bordes</span>
-          </div>
-        </label>
-
-        <label class="scale-option" :class="{ active: backgroundScaleMode === 'contain' }">
-          <input type="radio" v-model="backgroundScaleMode" value="contain" />
-          <div class="option-content">
-            <span class="option-icon">📦</span>
-            <span class="option-name">Contener (Contain)</span>
-            <span class="option-desc">Muestra toda la imagen, puede tener barras negras</span>
-          </div>
-        </label>
-
-        <label class="scale-option" :class="{ active: backgroundScaleMode === 'stretch' }">
-          <input type="radio" v-model="backgroundScaleMode" value="stretch" />
-          <div class="option-content">
-            <span class="option-icon">↔️</span>
-            <span class="option-name">Estirar (Stretch)</span>
-            <span class="option-desc">Estira para llenar, puede distorsionar</span>
-          </div>
-        </label>
-      </div>
-
-      <div class="modal-actions">
-        <button class="modal-btn modal-btn-cancel" @click="showBackgroundScaleModal = false">
-          Cancelar
-        </button>
-        <button
-          class="modal-btn modal-btn-confirm"
-          @click="scaleBackgroundToCanvas"
-          :disabled="isScalingBackground"
-        >
-          {{ isScalingBackground ? '⏳ Procesando...' : '✓ Crear imagen ajustada' }}
-        </button>
-      </div>
-
-      <p class="scale-note">
-        Se creará un nuevo asset con las dimensiones del canvas.
-        El original no se modificará.
-      </p>
-    </div>
-  </div>
+  <BackgroundScaleModal
+    v-model:show="showBackgroundScaleModal"
+    :image-width="currentBackgroundAsset?.width || 0"
+    :image-height="currentBackgroundAsset?.height || 0"
+    :canvas-width="currentScene.width"
+    :canvas-height="currentScene.height"
+    :is-processing="isScalingBackground"
+    @close="showBackgroundScaleModal = false"
+    @confirm="handleBackgroundScaleConfirm"
+  />
 </template>
 
 <style>
