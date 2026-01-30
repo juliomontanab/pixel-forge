@@ -38,10 +38,17 @@ export { default as ActorPlacementsSection } from './panels/ActorPlacementsSecti
 export { default as AnimationsSection } from './panels/AnimationsSection.vue'
 export { default as LightsSection } from './panels/LightsSection.vue'
 export { default as AssetsSection } from './panels/AssetsSection.vue'
+export { default as AudioAssetsSection } from './panels/AudioAssetsSection.vue'
+export { default as GlobalActorsSection } from './panels/GlobalActorsSection.vue'
+export { default as ItemsSection } from './panels/ItemsSection.vue'
+export { default as InventorySection } from './panels/InventorySection.vue'
+export { default as VerbsSection } from './panels/VerbsSection.vue'
 
 // Property Components
 export { default as PropertyField } from './properties/PropertyField.vue'
 export { default as PropertyGroup } from './properties/PropertyGroup.vue'
+export { default as PuzzleProperties } from './properties/PuzzleProperties.vue'
+export { default as CutsceneProperties } from './properties/CutsceneProperties.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'

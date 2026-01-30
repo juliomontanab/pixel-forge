@@ -51,7 +51,14 @@ import {
   ActorPlacementsSection,
   AnimationsSection,
   LightsSection,
-  AssetsSection
+  AssetsSection,
+  AudioAssetsSection,
+  GlobalActorsSection,
+  ItemsSection,
+  InventorySection,
+  VerbsSection,
+  PuzzleProperties,
+  CutsceneProperties
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -4089,149 +4096,63 @@ onUnmounted(() => {
           />
 
           <!-- Audio Assets Section (Global) -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.audioAssets }">
-            <div class="section-header" @click="toggleSection('audioAssets')">
-              <span class="collapse-icon">{{ collapsedSections.audioAssets ? '▶' : '▼' }}</span>
-              <span class="section-icon text-audio">🔊</span>
-              <span class="section-name">Audio</span>
-              <span class="section-count">{{ elementCounts.audioAssets }}</span>
-              <button class="add-btn" @click.stop="showAudioManagerModal = true" title="Open Audio Manager">📁</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.audioAssets">
-              <div
-                v-for="audio in project.globalData.audioAssets"
-                :key="audio.id"
-                class="element-item audio-item"
-              >
-                <span class="audio-type-icon">{{ audio.type === 'music' ? '🎵' : '🔊' }}</span>
-                <span class="item-name">{{ audio.name }}</span>
-                <span class="audio-duration">{{ formatDuration(audio.duration) }}</span>
-                <button
-                  class="audio-play-btn"
-                  @click.stop="currentlyPlayingAudio?.id === audio.id ? stopAudioPreview() : playAudioPreview(audio)"
-                  :title="currentlyPlayingAudio?.id === audio.id ? 'Stop' : 'Play'"
-                >
-                  {{ currentlyPlayingAudio?.id === audio.id ? '⏹' : '▶' }}
-                </button>
-              </div>
-              <p v-if="project.globalData.audioAssets.length === 0" class="empty-section">No audio</p>
-              <button class="manage-assets-btn" @click="showAudioManagerModal = true">Manage Audio</button>
-            </div>
-          </div>
+          <AudioAssetsSection
+            :audio-assets="project.globalData.audioAssets"
+            :collapsed="collapsedSections.audioAssets"
+            :currently-playing-audio="currentlyPlayingAudio"
+            :format-duration="formatDuration"
+            @toggle-collapse="toggleSection('audioAssets')"
+            @open-manager="showAudioManagerModal = true"
+            @play="playAudioPreview"
+            @stop="stopAudioPreview"
+          />
 
           <!-- Global Actors Section -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.globalActors }">
-            <div class="section-header" @click="toggleSection('globalActors')">
-              <span class="collapse-icon">{{ collapsedSections.globalActors ? '▶' : '▼' }}</span>
-              <span class="section-icon text-actor">👥</span>
-              <span class="section-name">Characters</span>
-              <span class="section-count">{{ elementCounts.globalActors }}</span>
-              <button class="add-btn" @click.stop="addGlobalActor" title="Add new character">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.globalActors">
-              <div
-                v-for="actor in project.globalData.actors"
-                :key="actor.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'globalActor' && s.element.id === actor.id) }"
-                @click="handleSelectElement('globalActor', actor)"
-              >
-                <span class="item-icon text-actor">👤</span>
-                <span class="item-name">{{ actor.name }}</span>
-                <button
-                  class="place-actor-btn"
-                  @click.stop="placeActorInScene(actor.id)"
-                  title="Place in current scene"
-                  :disabled="currentScene.actorPlacements.some(p => p.actorId === actor.id)"
-                >📍</button>
-              </div>
-              <p v-if="project.globalData.actors.length === 0" class="empty-section">No characters</p>
-            </div>
-          </div>
+          <GlobalActorsSection
+            :actors="project.globalData.actors"
+            :collapsed="collapsedSections.globalActors"
+            :selected-elements="selectedElements"
+            :actor-placements="currentScene.actorPlacements"
+            @toggle-collapse="toggleSection('globalActors')"
+            @add="addGlobalActor"
+            @select="handleSelectElement"
+            @place="placeActorInScene"
+          />
 
           <!-- Items Section (Global) -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.items }">
-            <div class="section-header" @click="toggleSection('items')">
-              <span class="collapse-icon">{{ collapsedSections.items ? '▶' : '▼' }}</span>
-              <span class="section-icon text-item">📦</span>
-              <span class="section-name">Items</span>
-              <span class="section-count">{{ elementCounts.items }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('item')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.items">
-              <div
-                v-for="item in project.globalData.items"
-                :key="item.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'item' && s.element.id === item.id) }"
-                @click="handleSelectElement('item', item)"
-              >
-                <span
-                  v-if="itemHasAssetIcon(item)"
-                  class="item-icon item-icon-asset"
-                  :style="getItemIconStyle(item)"
-                ></span>
-                <span v-else class="item-icon text-item">{{ item.icon || '📦' }}</span>
-                <span class="item-id">#{{ item.id }}</span>
-                <span class="item-name">{{ item.name }}</span>
-              </div>
-              <p v-if="project.globalData.items.length === 0" class="empty-section">No items defined</p>
-            </div>
-          </div>
+          <ItemsSection
+            :items="project.globalData.items"
+            :collapsed="collapsedSections.items"
+            :selected-elements="selectedElements"
+            :item-has-asset-icon="itemHasAssetIcon"
+            :get-item-icon-style="getItemIconStyle"
+            @toggle-collapse="toggleSection('items')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+          />
 
           <!-- Inventory Section (Global - Player's Items) -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.inventory }">
-            <div class="section-header" @click="toggleSection('inventory')">
-              <span class="collapse-icon">{{ collapsedSections.inventory ? '▶' : '▼' }}</span>
-              <span class="section-icon text-inventory">🎒</span>
-              <span class="section-name">Inventory</span>
-              <span class="section-count">{{ elementCounts.inventory }}</span>
-              <button class="add-btn" @click.stop="showAddToInventoryModal = true" title="Add item to inventory">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.inventory">
-              <div
-                v-for="itemId in project.globalData.inventory"
-                :key="itemId"
-                class="element-item inventory-item"
-              >
-                <span
-                  v-if="itemHasAssetIcon(getItemById(itemId))"
-                  class="item-icon item-icon-asset"
-                  :style="getItemIconStyle(getItemById(itemId))"
-                ></span>
-                <span v-else class="item-icon text-item">{{ getItemById(itemId)?.icon || '📦' }}</span>
-                <span class="item-name">{{ getItemById(itemId)?.name || 'Unknown' }}</span>
-                <button class="remove-item-btn" @click.stop="removeFromInventory(itemId)" title="Remove from inventory">×</button>
-              </div>
-              <p v-if="project.globalData.inventory.length === 0" class="empty-section">Inventory empty</p>
-            </div>
-          </div>
+          <InventorySection
+            :inventory="project.globalData.inventory"
+            :collapsed="collapsedSections.inventory"
+            :get-item-by-id="getItemById"
+            :item-has-asset-icon="itemHasAssetIcon"
+            :get-item-icon-style="getItemIconStyle"
+            @toggle-collapse="toggleSection('inventory')"
+            @add="showAddToInventoryModal = true"
+            @remove="removeFromInventory"
+          />
 
           <!-- Verbs Section (Global) -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.verbs }">
-            <div class="section-header" @click="toggleSection('verbs')">
-              <span class="collapse-icon">{{ collapsedSections.verbs ? '▶' : '▼' }}</span>
-              <span class="section-icon text-verb">🎯</span>
-              <span class="section-name">Verbs</span>
-              <span class="section-count">{{ elementCounts.verbs }}</span>
-              <button class="reset-btn" @click.stop="resetVerbsToDefault" title="Reset to default verbs">↺</button>
-              <button class="add-btn" @click.stop="handleAddElement('verb')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.verbs">
-              <div
-                v-for="verb in project.globalData.verbs"
-                :key="verb.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'verb' && s.element.id === verb.id) }"
-                @click="handleSelectElement('verb', verb)"
-              >
-                <span class="item-icon text-verb">{{ verb.icon }}</span>
-                <span class="item-id">#{{ verb.id }}</span>
-                <span class="item-name">{{ verb.name }}</span>
-              </div>
-              <p v-if="project.globalData.verbs.length === 0" class="empty-section">No verbs</p>
-            </div>
-          </div>
+          <VerbsSection
+            :verbs="project.globalData.verbs"
+            :collapsed="collapsedSections.verbs"
+            :selected-elements="selectedElements"
+            @toggle-collapse="toggleSection('verbs')"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @reset="resetVerbsToDefault"
+          />
         </div>
       </aside>
 
@@ -5504,331 +5425,18 @@ onUnmounted(() => {
             </template>
 
             <!-- Puzzle properties -->
-            <template v-if="selectedElements[0].type === 'puzzle'">
-              <div class="property-group">
-                <label class="property-label">Description</label>
-                <textarea
-                  v-model="selectedElements[0].element.description"
-                  class="property-input property-textarea"
-                  placeholder="Puzzle description for designers..."
-                ></textarea>
-              </div>
-
-              <div class="property-group">
-                <label class="property-label">Type</label>
-                <select v-model="selectedElements[0].element.type" class="property-input">
-                  <option value="item-combination">Item Combination</option>
-                  <option value="use-on-object">Use on Object</option>
-                  <option value="use-on-actor">Use on Actor</option>
-                  <option value="sequence">Sequence</option>
-                  <option value="dialog-choice">Dialog Choice</option>
-                  <option value="environmental">Environmental</option>
-                </select>
-              </div>
-
-              <!-- CONDITIONS SECTION -->
-              <div class="property-section">
-                <label class="property-section-title">Conditions</label>
-
-                <!-- Item Combination: Select 2+ items -->
-                <template v-if="selectedElements[0].element.type === 'item-combination'">
-                  <div class="property-group">
-                    <label class="property-label">Items to Combine</label>
-                    <div class="condition-items-list">
-                      <div v-for="(itemId, idx) in (selectedElements[0].element.conditions?.items || [])" :key="idx" class="condition-item-row">
-                        <select v-model="selectedElements[0].element.conditions.items[idx]" class="property-input">
-                          <option :value="null">-- Select Item --</option>
-                          <option v-for="item in currentScene.items" :key="item.id" :value="item.id">
-                            {{ item.icon }} {{ item.name }}
-                          </option>
-                        </select>
-                        <button class="remove-line-btn" @click="removeConditionItem(selectedElements[0].element, idx)">×</button>
-                      </div>
-                    </div>
-                    <button class="add-line-btn" @click="addConditionItem(selectedElements[0].element)">+ Add Item</button>
-                  </div>
-                </template>
-
-                <!-- Use on Object: Item + Target Object -->
-                <template v-if="selectedElements[0].element.type === 'use-on-object'">
-                  <div class="property-group">
-                    <label class="property-label">Item to Use</label>
-                    <select v-model="selectedElements[0].element.conditions.useItem" class="property-input">
-                      <option :value="null">-- Select Item --</option>
-                      <option v-for="item in currentScene.items" :key="item.id" :value="item.id">
-                        {{ item.icon }} {{ item.name }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="property-group">
-                    <label class="property-label">Target Object</label>
-                    <select v-model="selectedElements[0].element.conditions.targetObject" class="property-input">
-                      <option :value="null">-- Select Object --</option>
-                      <optgroup label="Hotspots">
-                        <option v-for="h in currentScene.hotspots" :key="'h-'+h.id" :value="{ type: 'hotspot', id: h.id }">
-                          {{ h.name }}
-                        </option>
-                      </optgroup>
-                      <optgroup label="Images">
-                        <option v-for="i in currentScene.images" :key="'i-'+i.id" :value="{ type: 'image', id: i.id }">
-                          {{ i.name }}
-                        </option>
-                      </optgroup>
-                      <optgroup label="Exits">
-                        <option v-for="e in currentScene.exits" :key="'e-'+e.id" :value="{ type: 'exit', id: e.id }">
-                          {{ e.name }}
-                        </option>
-                      </optgroup>
-                    </select>
-                  </div>
-                </template>
-
-                <!-- Use on Actor: Item + Target Actor -->
-                <template v-if="selectedElements[0].element.type === 'use-on-actor'">
-                  <div class="property-group">
-                    <label class="property-label">Item to Use/Give</label>
-                    <select v-model="selectedElements[0].element.conditions.useItem" class="property-input">
-                      <option :value="null">-- Select Item --</option>
-                      <option v-for="item in currentScene.items" :key="item.id" :value="item.id">
-                        {{ item.icon }} {{ item.name }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="property-group">
-                    <label class="property-label">Target Actor</label>
-                    <select v-model="selectedElements[0].element.conditions.targetActor" class="property-input">
-                      <option :value="null">-- Select Actor --</option>
-                      <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                        {{ actor.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-
-                <!-- Sequence: List of actions in order -->
-                <template v-if="selectedElements[0].element.type === 'sequence'">
-                  <div class="property-group">
-                    <label class="property-label">Sequence Steps</label>
-                    <div class="sequence-steps-list">
-                      <div v-for="(step, idx) in (selectedElements[0].element.conditions?.sequence || [])" :key="idx" class="sequence-step-row">
-                        <span class="step-number">{{ idx + 1 }}.</span>
-                        <input v-model="selectedElements[0].element.conditions.sequence[idx]" type="text" class="property-input" placeholder="Action description" />
-                        <button class="remove-line-btn" @click="removeSequenceStep(selectedElements[0].element, idx)">×</button>
-                      </div>
-                    </div>
-                    <button class="add-line-btn" @click="addSequenceStep(selectedElements[0].element)">+ Add Step</button>
-                  </div>
-                </template>
-
-                <!-- Dialog Choice: Dialog + Correct choices -->
-                <template v-if="selectedElements[0].element.type === 'dialog-choice'">
-                  <div class="property-group">
-                    <label class="property-label">Dialog</label>
-                    <select v-model="selectedElements[0].element.conditions.dialogId" class="property-input">
-                      <option :value="null">-- Select Dialog --</option>
-                      <option v-for="dialog in currentScene.dialogs" :key="dialog.id" :value="dialog.id">
-                        {{ dialog.name }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="property-group" v-if="selectedElements[0].element.conditions.dialogId">
-                    <label class="property-label">Required Choices</label>
-                    <p class="property-hint">Select which choices must be picked to solve</p>
-                    <div class="choices-checklist">
-                      <label
-                        v-for="choice in (currentScene.dialogs.find(d => d.id === selectedElements[0].element.conditions.dialogId)?.choices || [])"
-                        :key="choice.id"
-                        class="choice-checkbox"
-                      >
-                        <input
-                          type="checkbox"
-                          :checked="(selectedElements[0].element.conditions.correctChoices || []).includes(choice.id)"
-                          @change="toggleCorrectChoice(selectedElements[0].element, choice.id)"
-                        />
-                        {{ choice.text || '(empty choice)' }}
-                      </label>
-                    </div>
-                  </div>
-                </template>
-
-                <!-- Environmental: Just trigger object -->
-                <template v-if="selectedElements[0].element.type === 'environmental'">
-                  <div class="property-group">
-                    <label class="property-label">Trigger Object</label>
-                    <select v-model="selectedElements[0].element.conditions.targetObject" class="property-input">
-                      <option :value="null">-- Select Object --</option>
-                      <optgroup label="Hotspots">
-                        <option v-for="h in currentScene.hotspots" :key="'h-'+h.id" :value="{ type: 'hotspot', id: h.id }">
-                          {{ h.name }}
-                        </option>
-                      </optgroup>
-                      <optgroup label="Images">
-                        <option v-for="i in currentScene.images" :key="'i-'+i.id" :value="{ type: 'image', id: i.id }">
-                          {{ i.name }}
-                        </option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  <div class="property-group">
-                    <label class="property-label">Required Verb</label>
-                    <select v-model="selectedElements[0].element.conditions.requiredVerb" class="property-input">
-                      <option :value="null">-- Any Verb --</option>
-                      <option v-for="verb in currentScene.verbs" :key="verb.id" :value="verb.id">
-                        {{ verb.icon }} {{ verb.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-              </div>
-
-              <!-- RESULT SECTION -->
-              <div class="property-section">
-                <label class="property-section-title">Result</label>
-
-                <div class="property-group">
-                  <label class="property-label">Result Type</label>
-                  <select v-model="selectedElements[0].element.result.type" class="property-input">
-                    <option value="none">None</option>
-                    <option value="give-item">Give Item</option>
-                    <option value="remove-item">Remove/Consume Items</option>
-                    <option value="unlock-exit">Unlock Exit</option>
-                    <option value="play-cutscene">Play Cutscene</option>
-                    <option value="change-state">Change Object State</option>
-                    <option value="show-dialog">Show Dialog</option>
-                  </select>
-                </div>
-
-                <!-- Give Item -->
-                <template v-if="selectedElements[0].element.result.type === 'give-item'">
-                  <div class="property-group">
-                    <label class="property-label">Item to Give</label>
-                    <select v-model="selectedElements[0].element.result.giveItem" class="property-input">
-                      <option :value="null">-- Select Item --</option>
-                      <option v-for="item in currentScene.items" :key="item.id" :value="item.id">
-                        {{ item.icon }} {{ item.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-
-                <!-- Remove Items -->
-                <template v-if="selectedElements[0].element.result.type === 'remove-item' || selectedElements[0].element.result.type === 'give-item'">
-                  <div class="property-group">
-                    <label class="property-label">Items to Remove/Consume</label>
-                    <div class="remove-items-list">
-                      <div v-for="(itemId, idx) in (selectedElements[0].element.result?.removeItems || [])" :key="idx" class="condition-item-row">
-                        <select v-model="selectedElements[0].element.result.removeItems[idx]" class="property-input">
-                          <option :value="null">-- Select Item --</option>
-                          <option v-for="item in currentScene.items" :key="item.id" :value="item.id">
-                            {{ item.icon }} {{ item.name }}
-                          </option>
-                        </select>
-                        <button class="remove-line-btn" @click="removeResultRemoveItem(selectedElements[0].element, idx)">×</button>
-                      </div>
-                    </div>
-                    <button class="add-line-btn" @click="addResultRemoveItem(selectedElements[0].element)">+ Add Item to Remove</button>
-                  </div>
-                </template>
-
-                <!-- Unlock Exit -->
-                <template v-if="selectedElements[0].element.result.type === 'unlock-exit'">
-                  <div class="property-group">
-                    <label class="property-label">Exit to Unlock</label>
-                    <select v-model="selectedElements[0].element.result.unlockExit" class="property-input">
-                      <option :value="null">-- Select Exit --</option>
-                      <option v-for="exit in currentScene.exits" :key="exit.id" :value="exit.id">
-                        {{ exit.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-
-                <!-- Play Cutscene -->
-                <template v-if="selectedElements[0].element.result.type === 'play-cutscene'">
-                  <div class="property-group">
-                    <label class="property-label">Cutscene to Play</label>
-                    <select v-model="selectedElements[0].element.result.playCutscene" class="property-input">
-                      <option :value="null">-- Select Cutscene --</option>
-                      <option v-for="cs in currentScene.cutscenes" :key="cs.id" :value="cs.id">
-                        {{ cs.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-
-                <!-- Change State -->
-                <template v-if="selectedElements[0].element.result.type === 'change-state'">
-                  <div class="property-group">
-                    <label class="property-label">Object to Change</label>
-                    <select v-model="selectedElements[0].element.result.changeState" class="property-input">
-                      <option :value="null">-- Select Object --</option>
-                      <optgroup label="Hotspots">
-                        <option v-for="h in currentScene.hotspots" :key="'h-'+h.id" :value="{ type: 'hotspot', id: h.id, newState: '' }">
-                          {{ h.name }}
-                        </option>
-                      </optgroup>
-                      <optgroup label="Images">
-                        <option v-for="i in currentScene.images" :key="'i-'+i.id" :value="{ type: 'image', id: i.id, newState: '' }">
-                          {{ i.name }}
-                        </option>
-                      </optgroup>
-                      <optgroup label="Exits">
-                        <option v-for="e in currentScene.exits" :key="'e-'+e.id" :value="{ type: 'exit', id: e.id, newState: '' }">
-                          {{ e.name }}
-                        </option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  <div class="property-group" v-if="selectedElements[0].element.result.changeState">
-                    <label class="property-label">New State</label>
-                    <input
-                      v-model="selectedElements[0].element.result.changeState.newState"
-                      type="text"
-                      class="property-input"
-                      placeholder="e.g., open, closed, broken"
-                    />
-                  </div>
-                </template>
-
-                <!-- Show Dialog -->
-                <template v-if="selectedElements[0].element.result.type === 'show-dialog'">
-                  <div class="property-group">
-                    <label class="property-label">Dialog to Show</label>
-                    <select v-model="selectedElements[0].element.result.showDialog" class="property-input">
-                      <option :value="null">-- Select Dialog --</option>
-                      <option v-for="dialog in currentScene.dialogs" :key="dialog.id" :value="dialog.id">
-                        {{ dialog.name }}
-                      </option>
-                    </select>
-                  </div>
-                </template>
-              </div>
-
-              <!-- HINTS SECTION -->
-              <div class="property-section">
-                <label class="property-section-title">Hints</label>
-                <div class="hints-list">
-                  <div v-for="(hint, idx) in (selectedElements[0].element.hints || [])" :key="idx" class="hint-row">
-                    <div class="hint-header">
-                      <label>After</label>
-                      <input v-model.number="hint.afterAttempts" type="number" min="1" class="property-input tiny" />
-                      <label>attempts:</label>
-                      <button class="remove-line-btn" @click="removePuzzleHint(selectedElements[0].element, idx)">×</button>
-                    </div>
-                    <textarea v-model="hint.text" class="property-input property-textarea" placeholder="Hint text..."></textarea>
-                  </div>
-                </div>
-                <button class="add-line-btn" @click="addPuzzleHint(selectedElements[0].element)">+ Add Hint</button>
-              </div>
-
-              <!-- STATE -->
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.solved" />
-                  Solved (for testing)
-                </label>
-              </div>
-            </template>
+            <PuzzleProperties
+              v-if="selectedElements[0].type === 'puzzle'"
+              :element="selectedElements[0].element"
+              :items="project.globalData.items"
+              :hotspots="currentScene.hotspots"
+              :images="currentScene.images"
+              :exits="currentScene.exits"
+              :dialogs="currentScene.dialogs"
+              :cutscenes="currentScene.cutscenes"
+              :verbs="project.globalData.verbs"
+              :actors="project.globalData.actors"
+            />
 
             <!-- Item properties -->
             <template v-if="selectedElements[0].type === 'item'">
@@ -6067,245 +5675,17 @@ onUnmounted(() => {
             </template>
 
             <!-- Cutscene properties -->
-            <template v-if="selectedElements[0].type === 'cutscene'">
-              <div class="property-group">
-                <label class="property-label">Trigger</label>
-                <select v-model="selectedElements[0].element.trigger" class="property-select">
-                  <option value="manual">Manual</option>
-                  <option value="scene-enter">Scene Enter</option>
-                  <option value="object-interact">Object Interact</option>
-                  <option value="puzzle-solved">Puzzle Solved</option>
-                </select>
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.trigger === 'object-interact'">
-                <label class="property-label">Target Object</label>
-                <select v-model="selectedElements[0].element.triggerTarget" class="property-select">
-                  <option :value="null">-- Select --</option>
-                  <option v-for="img in currentScene.images" :key="img.id" :value="img.id">
-                    {{ img.name }} (#{{ img.id }})
-                  </option>
-                  <option v-for="hotspot in currentScene.hotspots" :key="'h'+hotspot.id" :value="'hotspot-'+hotspot.id">
-                    {{ hotspot.name }} (#{{ hotspot.id }})
-                  </option>
-                </select>
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.trigger === 'puzzle-solved'">
-                <label class="property-label">Target Puzzle</label>
-                <select v-model="selectedElements[0].element.triggerTarget" class="property-select">
-                  <option :value="null">-- Select --</option>
-                  <option v-for="puzzle in currentScene.puzzles" :key="puzzle.id" :value="puzzle.id">
-                    {{ puzzle.name }} (#{{ puzzle.id }})
-                  </option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.skippable" />
-                  Skippable (ESC)
-                </label>
-              </div>
-
-              <!-- Actions List -->
-              <div class="property-divider">
-                <span>ACTIONS ({{ selectedElements[0].element.actions.length }})</span>
-              </div>
-
-              <div class="actions-list">
-                <div
-                  v-for="(action, index) in selectedElements[0].element.actions"
-                  :key="action.id"
-                  class="action-item"
-                >
-                  <div class="action-header">
-                    <span class="action-index">#{{ index + 1 }}</span>
-                    <span class="action-type">{{ action.type }}</span>
-                    <div class="action-controls">
-                      <button
-                        class="action-btn"
-                        @click="moveAction(index, -1)"
-                        :disabled="index === 0"
-                        title="Move up"
-                      >↑</button>
-                      <button
-                        class="action-btn"
-                        @click="moveAction(index, 1)"
-                        :disabled="index === selectedElements[0].element.actions.length - 1"
-                        title="Move down"
-                      >↓</button>
-                      <button
-                        class="action-btn action-btn-delete"
-                        @click="removeAction(index)"
-                        title="Delete"
-                      >×</button>
-                    </div>
-                  </div>
-
-                  <!-- Action Parameters based on type -->
-                  <div class="action-params">
-                    <!-- Dialog -->
-                    <template v-if="action.type === 'dialog'">
-                      <select v-model="action.params.actorId" class="property-select-sm">
-                        <option :value="null">Narrator</option>
-                        <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                          {{ actor.name }}
-                        </option>
-                      </select>
-                      <textarea
-                        v-model="action.params.text"
-                        class="property-textarea-sm"
-                        placeholder="Dialog text..."
-                        rows="2"
-                      ></textarea>
-                    </template>
-
-                    <!-- Move Actor -->
-                    <template v-if="action.type === 'move-actor'">
-                      <select v-model="action.params.actorId" class="property-select-sm">
-                        <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                          {{ actor.name }}
-                        </option>
-                      </select>
-                      <div class="action-row">
-                        <input v-model.number="action.params.x" type="number" placeholder="X" class="property-input-xs" />
-                        <input v-model.number="action.params.y" type="number" placeholder="Y" class="property-input-xs" />
-                      </div>
-                      <label class="property-label-sm">
-                        <input type="checkbox" v-model="action.params.walk" /> Walk animation
-                      </label>
-                    </template>
-
-                    <!-- Actor Direction -->
-                    <template v-if="action.type === 'actor-direction'">
-                      <select v-model="action.params.actorId" class="property-select-sm">
-                        <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                          {{ actor.name }}
-                        </option>
-                      </select>
-                      <select v-model="action.params.direction" class="property-select-sm">
-                        <option value="north">North</option>
-                        <option value="south">South</option>
-                        <option value="east">East</option>
-                        <option value="west">West</option>
-                      </select>
-                    </template>
-
-                    <!-- Actor Costume -->
-                    <template v-if="action.type === 'actor-costume'">
-                      <select v-model="action.params.actorId" class="property-select-sm">
-                        <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                          {{ actor.name }}
-                        </option>
-                      </select>
-                      <input v-model="action.params.costume" type="text" placeholder="Costume name" class="property-input-sm" />
-                    </template>
-
-                    <!-- Play SFX -->
-                    <template v-if="action.type === 'play-sfx'">
-                      <select v-model="action.params.sfxId" class="property-select-sm">
-                        <option v-for="sfx in currentScene.sfx" :key="sfx.id" :value="sfx.id">
-                          {{ sfx.name }}
-                        </option>
-                      </select>
-                    </template>
-
-                    <!-- Play Music -->
-                    <template v-if="action.type === 'play-music'">
-                      <select v-model="action.params.musicId" class="property-select-sm">
-                        <option v-for="track in currentScene.music" :key="track.id" :value="track.id">
-                          {{ track.name }}
-                        </option>
-                      </select>
-                      <input v-model.number="action.params.fadeIn" type="number" placeholder="Fade in (ms)" class="property-input-sm" />
-                    </template>
-
-                    <!-- Stop Music -->
-                    <template v-if="action.type === 'stop-music'">
-                      <input v-model.number="action.params.fadeOut" type="number" placeholder="Fade out (ms)" class="property-input-sm" />
-                    </template>
-
-                    <!-- Wait -->
-                    <template v-if="action.type === 'wait'">
-                      <input v-model.number="action.params.duration" type="number" placeholder="Duration (ms)" class="property-input-sm" />
-                    </template>
-
-                    <!-- Fade In/Out -->
-                    <template v-if="action.type === 'fade-in' || action.type === 'fade-out'">
-                      <input v-model.number="action.params.duration" type="number" placeholder="Duration (ms)" class="property-input-sm" />
-                      <input v-model="action.params.color" type="color" class="property-color" title="Fade color" />
-                    </template>
-
-                    <!-- Camera Pan -->
-                    <template v-if="action.type === 'camera-pan'">
-                      <div class="action-row">
-                        <input v-model.number="action.params.x" type="number" placeholder="X" class="property-input-xs" />
-                        <input v-model.number="action.params.y" type="number" placeholder="Y" class="property-input-xs" />
-                      </div>
-                      <input v-model.number="action.params.duration" type="number" placeholder="Duration (ms)" class="property-input-sm" />
-                    </template>
-
-                    <!-- Camera Shake -->
-                    <template v-if="action.type === 'camera-shake'">
-                      <input v-model.number="action.params.intensity" type="number" placeholder="Intensity (px)" class="property-input-sm" />
-                      <input v-model.number="action.params.duration" type="number" placeholder="Duration (ms)" class="property-input-sm" />
-                    </template>
-
-                    <!-- Change Scene -->
-                    <template v-if="action.type === 'change-scene'">
-                      <select v-model="action.params.sceneId" class="property-select-sm">
-                        <option value="">-- Select scene --</option>
-                        <option
-                          v-for="scene in availableScenes"
-                          :key="scene.id"
-                          :value="scene.id"
-                        >
-                          {{ scene.name }}
-                        </option>
-                      </select>
-                      <select v-model="action.params.transition" class="property-select-sm">
-                        <option value="cut">Cut</option>
-                        <option value="fade">Fade</option>
-                        <option value="dissolve">Dissolve</option>
-                      </select>
-                    </template>
-                  </div>
-                </div>
-
-                <p v-if="selectedElements[0].element.actions.length === 0" class="empty-actions">
-                  No actions yet
-                </p>
-              </div>
-
-              <!-- Add Action Dropdown -->
-              <div class="property-group">
-                <label class="property-label">Add Action</label>
-                <select class="property-select" @change="addAction($event)">
-                  <option value="">-- Select action type --</option>
-                  <optgroup label="Dialog & Actors">
-                    <option value="dialog">Dialog</option>
-                    <option value="move-actor">Move Actor</option>
-                    <option value="actor-direction">Actor Direction</option>
-                    <option value="actor-costume">Actor Costume</option>
-                  </optgroup>
-                  <optgroup label="Audio">
-                    <option value="play-sfx">Play SFX</option>
-                    <option value="play-music">Play Music</option>
-                    <option value="stop-music">Stop Music</option>
-                  </optgroup>
-                  <optgroup label="Timing">
-                    <option value="wait">Wait</option>
-                  </optgroup>
-                  <optgroup label="Visual Effects">
-                    <option value="fade-in">Fade In</option>
-                    <option value="fade-out">Fade Out</option>
-                    <option value="camera-pan">Camera Pan</option>
-                    <option value="camera-shake">Camera Shake</option>
-                  </optgroup>
-                  <optgroup label="Navigation">
-                    <option value="change-scene">Change Scene</option>
-                  </optgroup>
-                </select>
-              </div>
-            </template>
+            <CutsceneProperties
+              v-if="selectedElements[0].type === 'cutscene'"
+              :element="selectedElements[0].element"
+              :actors="project.globalData.actors"
+              :images="currentScene.images"
+              :hotspots="currentScene.hotspots"
+              :puzzles="currentScene.puzzles"
+              :sfx="currentScene.sfx"
+              :music="currentScene.music"
+              :scenes="availableScenes"
+            />
 
             <!-- Light properties -->
             <template v-if="selectedElements[0].type === 'light'">
