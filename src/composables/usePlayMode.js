@@ -34,6 +34,13 @@ import { ref, computed, watch } from 'vue'
  * @param {Function} options.getAudioAssetById - Function to get audio asset by ID
  * @param {Function} options.switchScene - Function to switch scenes
  * @param {Function} [options.getSceneCoords] - Function to convert event to scene coordinates
+ * @param {Function} [options.startCutscene] - Function to start a cutscene
+ * @param {Function} [options.getAnimationIdFromAssignment] - Function to get animation ID from assignment
+ * @param {Function} [options.isAnimationMirrored] - Function to check if animation is mirrored
+ * @param {Function} [options.getAnimationSpritesheetUrl] - Function to get spritesheet URL
+ * @param {Function} [options.getAnimationSpritesheetSize] - Function to get spritesheet size
+ * @param {Ref|ComputedRef} [options.globalAnimations] - Global animations array
+ * @param {Ref} [options.actorPreviewFrames] - Actor preview frames ref
  * @returns {Object} Play mode methods and state
  */
 export function usePlayMode(options = {}) {
@@ -43,7 +50,14 @@ export function usePlayMode(options = {}) {
     selectedElements,
     getAudioAssetById,
     switchScene,
-    getSceneCoords
+    getSceneCoords,
+    startCutscene,
+    getAnimationIdFromAssignment,
+    isAnimationMirrored,
+    getAnimationSpritesheetUrl,
+    getAnimationSpritesheetSize,
+    globalAnimations,
+    actorPreviewFrames
   } = options
 
   // =====================
@@ -683,6 +697,505 @@ export function usePlayMode(options = {}) {
     }
   })
 
+  // =====================
+  // ITEM INTERACTION SYSTEM
+  // =====================
+
+  /**
+   * Use item with object
+   * @param {Object} item - Item to use
+   * @param {Object} targetObj - Target object { type, element }
+   * @returns {boolean} Whether the usage was successful
+   */
+  const useItemWith = (item, targetObj) => {
+    const useWith = item.useWith || []
+    const targetName = targetObj.element?.name || targetObj.type
+
+    for (const usage of useWith) {
+      if (usage.target === targetName || usage.targetId === targetObj.element?.id) {
+        executeItemUsage(item, usage)
+        playModeState.value.selectedItem = null
+        return true
+      }
+    }
+
+    showPlayMessage(`I can't use ${item.name} with that.`)
+    playModeState.value.selectedItem = null
+    return false
+  }
+
+  /**
+   * Execute item usage result
+   * @param {Object} item - Item being used
+   * @param {Object} usage - Usage configuration
+   */
+  const executeItemUsage = (item, usage) => {
+    if (usage.message) {
+      showPlayMessage(usage.message)
+    }
+    if (usage.removeItem) {
+      playRemoveFromInventory(item.id)
+    }
+    if (usage.addItem) {
+      playAddToInventory(usage.addItem)
+    }
+    if (usage.setVariable) {
+      playModeState.value.variables[usage.setVariable] = usage.variableValue ?? true
+    }
+    if (usage.triggerCutscene && startCutscene) {
+      const cutscene = currentScene.value.cutscenes?.find(c => c.id === usage.triggerCutscene)
+      if (cutscene) startCutscene(cutscene)
+    }
+    if (usage.solvePuzzle) {
+      solvePuzzle(usage.solvePuzzle)
+    }
+  }
+
+  // =====================
+  // PUZZLE SYSTEM
+  // =====================
+
+  /**
+   * Check puzzle conditions
+   * @param {Object} puzzle - Puzzle to check
+   * @returns {boolean} Whether conditions are met
+   */
+  const checkPuzzleConditions = (puzzle) => {
+    if (!puzzle.conditions) return true
+
+    for (const condition of puzzle.conditions) {
+      switch (condition.type) {
+        case 'has-item':
+          if (!hasItem(condition.itemId)) return false
+          break
+        case 'variable':
+          if (playModeState.value.variables[condition.variable] !== condition.value) return false
+          break
+        case 'puzzle-solved':
+          const otherPuzzle = currentScene.value.puzzles?.find(p => p.id === condition.puzzleId)
+          if (!otherPuzzle?.solved) return false
+          break
+      }
+    }
+    return true
+  }
+
+  /**
+   * Attempt to solve a puzzle
+   * @param {Object} puzzle - Puzzle to attempt
+   */
+  const attemptPuzzle = (puzzle) => {
+    if (puzzle.solved) {
+      showPlayMessage("Already solved.")
+      return
+    }
+
+    if (!checkPuzzleConditions(puzzle)) {
+      const hint = puzzle.hints?.[0]
+      showPlayMessage(hint || "Something is missing...")
+      return
+    }
+
+    solvePuzzle(puzzle.id)
+  }
+
+  /**
+   * Mark puzzle as solved and execute results
+   * @param {number} puzzleId - Puzzle ID to solve
+   */
+  const solvePuzzle = (puzzleId) => {
+    const puzzle = currentScene.value.puzzles?.find(p => p.id === puzzleId)
+    if (!puzzle || puzzle.solved) return
+
+    puzzle.solved = true
+    showPlayMessage(puzzle.result?.message || "Puzzle solved!")
+
+    if (puzzle.result) {
+      if (puzzle.result.addItem) {
+        playAddToInventory(puzzle.result.addItem)
+      }
+      if (puzzle.result.removeItem) {
+        playRemoveFromInventory(puzzle.result.removeItem)
+      }
+      if (puzzle.result.setVariable) {
+        playModeState.value.variables[puzzle.result.setVariable] = puzzle.result.variableValue ?? true
+      }
+      if (puzzle.result.triggerCutscene && startCutscene) {
+        const cutscene = currentScene.value.cutscenes?.find(c => c.id === puzzle.result.triggerCutscene)
+        if (cutscene) startCutscene(cutscene)
+      }
+      if (puzzle.result.playSFX) {
+        playSFX(puzzle.result.playSFX)
+      }
+    }
+  }
+
+  // =====================
+  // CLICK & INTERACTION HANDLERS
+  // =====================
+
+  /**
+   * Handle click in play mode
+   * @param {Event} event - Click event
+   */
+  const onPlayModeClick = (event) => {
+    if (!playMode.value) return
+    if (!getSceneCoords) return
+
+    const coords = getSceneCoords(event)
+
+    // If dialog is active, advance it
+    if (playModeState.value.currentDialog) {
+      advanceDialog()
+      return
+    }
+
+    // Check if clicking on an interactive object
+    const clickedObject = findObjectAtPoint(coords.x, coords.y)
+
+    if (clickedObject) {
+      handleObjectInteraction(clickedObject)
+    } else {
+      // Walk to clicked point
+      walkToPoint(coords.x, coords.y)
+    }
+  }
+
+  /**
+   * Handle interaction with an object
+   * @param {Object} obj - Object to interact with { type, element }
+   */
+  const handleObjectInteraction = (obj) => {
+    // If using an item, handle "Use X with Y"
+    if (playModeState.value.selectedItem) {
+      const item = project.value.globalData.items.find(i => i.id === playModeState.value.selectedItem)
+      if (item) {
+        useItemWith(item, obj)
+        return
+      }
+    }
+
+    const verb = project.value.globalData.verbs.find(v => v.id === playModeState.value.selectedVerb)
+    const verbName = verb?.name?.toLowerCase() || 'look at'
+    const verbId = verb?.id || 1
+
+    // CHECK CUSTOM INTERACTIONS FIRST
+    if ((obj.type === 'hotspot' || obj.type === 'image') && obj.element.interactions?.length > 0) {
+      const interaction = obj.element.interactions.find(i => i.verbId === verbId)
+
+      if (interaction) {
+        // Check condition if exists
+        if (interaction.hasCondition && interaction.condition) {
+          const varValue = playModeState.value.variables[interaction.condition.varName]
+          const condValue = interaction.condition.value
+          let conditionMet = false
+
+          switch (interaction.condition.operator) {
+            case '==': conditionMet = varValue == condValue; break
+            case '!=': conditionMet = varValue != condValue; break
+            case '>': conditionMet = Number(varValue) > Number(condValue); break
+            case '<': conditionMet = Number(varValue) < Number(condValue); break
+            case '>=': conditionMet = Number(varValue) >= Number(condValue); break
+            case '<=': conditionMet = Number(varValue) <= Number(condValue); break
+          }
+
+          if (!conditionMet) {
+            showPlayMessage("Nothing happens.")
+            return
+          }
+        }
+
+        executeInteractionAction(interaction, obj)
+        return
+      }
+    }
+
+    // Check for description (default "look at" response)
+    const isLookVerb = verbName === 'look at' || verbName === 'look' || verbName === 'examine' ||
+                       verbName === 'mirar' || verbName === 'examinar' || verbName === 'ver' ||
+                       verbId === 1
+    if (isLookVerb &&
+        (obj.type === 'hotspot' || obj.type === 'image') &&
+        obj.element.description) {
+      showPlayMessage(obj.element.description)
+      return
+    }
+
+    // Check for puzzle interaction
+    if (obj.type === 'hotspot' || obj.type === 'image') {
+      const puzzle = currentScene.value.puzzles?.find(p =>
+        p.triggerObject === obj.element.id ||
+        p.triggerObject === obj.element.name
+      )
+      if (puzzle && (verbName === 'use' || verbName === 'open' || verbName === 'push' || verbName === 'pull')) {
+        attemptPuzzle(puzzle)
+        return
+      }
+    }
+
+    // Check for cutscene trigger
+    if ((obj.type === 'hotspot' || obj.type === 'image' || obj.type === 'actor') && startCutscene) {
+      const cutscene = currentScene.value.cutscenes?.find(c =>
+        c.trigger === 'object-interact' &&
+        c.triggerTarget === obj.element.id
+      )
+      if (cutscene && !cutscene.hasPlayed) {
+        cutscene.hasPlayed = true
+        startCutscene(cutscene)
+        return
+      }
+    }
+
+    // Helper functions to detect verb types (supports English and Spanish)
+    const isLookVerbType = ['look at', 'look', 'examine', 'mirar', 'examinar', 'ver'].includes(verbName)
+    const isWalkVerbType = ['walk to', 'walk', 'go', 'ir', 'caminar', 'ir a'].includes(verbName)
+    const isPickupVerbType = ['pick up', 'take', 'get', 'recoger', 'tomar', 'coger', 'agarrar'].includes(verbName)
+    const isTalkVerbType = ['talk to', 'talk', 'speak', 'hablar', 'hablar con', 'conversar'].includes(verbName)
+    const isUseVerbType = ['use', 'usar', 'utilizar'].includes(verbName)
+    const isOpenVerbType = ['open', 'abrir'].includes(verbName)
+    const isCloseVerbType = ['close', 'cerrar'].includes(verbName)
+    const isPushPullVerbType = ['push', 'pull', 'empujar', 'tirar', 'jalar'].includes(verbName)
+    const isGiveVerbType = ['give', 'dar', 'entregar'].includes(verbName)
+
+    // Default interactions based on verb type
+    if (isLookVerbType) {
+      if (obj.element.examineDialog) {
+        showPlayMessage(obj.element.examineDialog)
+      } else if (obj.element.description) {
+        showPlayMessage(obj.element.description)
+      } else {
+        showPlayMessage(`Es ${obj.element.name || obj.type}.`)
+      }
+    } else if (isWalkVerbType) {
+      if (obj.type === 'exit') {
+        if (obj.element.targetScene) {
+          changeSceneWithTransition(obj.element.targetScene)
+        } else {
+          showPlayMessage("Esta salida no lleva a ningún lado.")
+        }
+      } else {
+        walkToPoint(obj.element.x + (obj.element.w || 0) / 2, obj.element.y + (obj.element.h || 0))
+      }
+    } else if (isPickupVerbType) {
+      if (obj.type === 'image' && obj.element.pickable) {
+        const item = project.value.globalData.items.find(i =>
+          i.name === obj.element.name || i.linkedImageId === obj.element.id
+        )
+        if (item) {
+          playAddToInventory(item.id)
+          obj.element.visible = false
+          if (item.pickupDialog) {
+            showPlayMessage(item.pickupDialog)
+          }
+        } else {
+          playAddToInventory(obj.element.id)
+          showPlayMessage(`Recogido: ${obj.element.name}`)
+        }
+      } else {
+        showPlayMessage("No puedo recoger eso.")
+      }
+    } else if (isTalkVerbType) {
+      if (obj.type === 'actor') {
+        const dialog = currentScene.value.dialogs.find(d => d.actor === obj.element.actorId)
+        if (dialog) {
+          startDialog(dialog)
+        } else {
+          showPlayMessage("No parece querer hablar.")
+        }
+      } else {
+        showPlayMessage("No puedo hablar con eso.")
+      }
+    } else if (isUseVerbType) {
+      if (obj.type === 'exit') {
+        if (obj.element.targetScene) {
+          changeSceneWithTransition(obj.element.targetScene)
+        } else {
+          showPlayMessage("Esta salida no lleva a ningún lado.")
+        }
+      } else {
+        showPlayMessage("Necesito usar algo con eso.")
+      }
+    } else if (isOpenVerbType) {
+      showPlayMessage("No puedo abrir eso.")
+    } else if (isCloseVerbType) {
+      showPlayMessage("No puedo cerrar eso.")
+    } else if (isPushPullVerbType) {
+      showPlayMessage("No se mueve.")
+    } else if (isGiveVerbType) {
+      showPlayMessage("No puedo dar eso.")
+    } else {
+      showPlayMessage(`No puedo hacer eso.`)
+    }
+  }
+
+  /**
+   * Execute an interaction action
+   * @param {Object} interaction - Interaction configuration
+   * @param {Object} obj - Object being interacted with
+   */
+  const executeInteractionAction = (interaction, obj) => {
+    const params = interaction.params || {}
+
+    switch (interaction.action) {
+      case 'dialog':
+        if (params.text) {
+          if (params.actorId) {
+            const actor = project.value.globalData.actors.find(a => a.id === params.actorId)
+            showPlayMessage(`${actor?.name || 'Someone'}: "${params.text}"`)
+          } else {
+            showPlayMessage(params.text)
+          }
+        }
+        break
+
+      case 'dialogRef':
+        if (params.dialogId) {
+          const dialog = currentScene.value.dialogs.find(d => d.id === params.dialogId)
+          if (dialog) {
+            startDialog(dialog)
+          }
+        }
+        break
+
+      case 'cutscene':
+        if (params.cutsceneId && startCutscene) {
+          const cutscene = currentScene.value.cutscenes.find(c => c.id === params.cutsceneId)
+          if (cutscene) {
+            startCutscene(cutscene)
+          }
+        }
+        break
+
+      case 'pickup':
+        if (params.itemId) {
+          playAddToInventory(params.itemId)
+          const item = project.value.globalData.items.find(i => i.id === params.itemId)
+          showPlayMessage(`Picked up: ${item?.name || 'item'}`)
+
+          if (params.removeFromScene && obj.element) {
+            obj.element.visible = false
+          }
+        }
+        break
+
+      case 'use_item':
+        if (params.requiredItemId) {
+          const hasRequiredItem = playModeState.value.inventory.includes(params.requiredItemId)
+          if (hasRequiredItem) {
+            showPlayMessage(params.successText || "It worked!")
+          } else {
+            showPlayMessage(params.failText || "I need something to use with this.")
+          }
+        }
+        break
+
+      case 'change_scene':
+        if (params.sceneId) {
+          changeSceneWithTransition(params.sceneId)
+        }
+        break
+
+      case 'set_variable':
+        if (params.varName) {
+          if (!playModeState.value.variables) {
+            playModeState.value.variables = {}
+          }
+          playModeState.value.variables[params.varName] = params.varValue
+          console.log(`[PlayMode] Variable set: ${params.varName} = ${params.varValue}`)
+        }
+        break
+
+      case 'custom':
+        if (params.script) {
+          try {
+            const context = {
+              showMessage: showPlayMessage,
+              setVariable: (name, value) => {
+                if (!playModeState.value.variables) playModeState.value.variables = {}
+                playModeState.value.variables[name] = value
+              },
+              getVariable: (name) => playModeState.value.variables?.[name],
+              addItem: playAddToInventory,
+              hasItem: (id) => playModeState.value.inventory.includes(id),
+              changeScene: changeSceneWithTransition
+            }
+            const fn = new Function(...Object.keys(context), params.script)
+            fn(...Object.values(context))
+          } catch (e) {
+            console.error('[PlayMode] Custom script error:', e)
+          }
+        }
+        break
+
+      default:
+        showPlayMessage("Nothing happens.")
+    }
+  }
+
+  // =====================
+  // PLAYER ANIMATION HELPERS
+  // =====================
+
+  /**
+   * Get current animation for player based on state
+   * @returns {Object|null} Animation object with _mirror flag, or null
+   */
+  const getPlayerCurrentAnimation = () => {
+    const playerActor = getPlayerActor.value
+    if (!playerActor || !playerActor.animations) return null
+
+    const state = playModeState.value.playerState || 'idle'
+    const assignment = playerActor.animations[state]
+
+    if (!assignment) return null
+
+    // Handle both old format (just ID) and new format ({ id, mirror })
+    const animId = getAnimationIdFromAssignment ? getAnimationIdFromAssignment(assignment) : assignment
+    if (!animId) return null
+
+    const mirror = isAnimationMirrored ? isAnimationMirrored(assignment) : false
+
+    // Search in global animations first, then scene animations for backward compatibility
+    const anim = (globalAnimations?.value || []).find(a => a.id === animId) ||
+                 currentScene.value.animations?.find(a => a.id === animId)
+
+    if (!anim) return null
+
+    return { ...anim, _mirror: mirror }
+  }
+
+  /**
+   * Get style for player animation frame
+   * @returns {Object} CSS style object
+   */
+  const getPlayerAnimationStyle = () => {
+    const anim = getPlayerCurrentAnimation()
+    if (!anim || !anim.frames || anim.frames.length === 0) return {}
+
+    const spritesheetUrl = getAnimationSpritesheetUrl ? getAnimationSpritesheetUrl(anim) : null
+    if (!spritesheetUrl) return {}
+
+    const playerActor = getPlayerActor.value
+    const frameIndex = actorPreviewFrames?.value?.[playerActor?.id] || 0
+    const frame = anim.frames[frameIndex % anim.frames.length]
+    const size = getAnimationSpritesheetSize ? getAnimationSpritesheetSize(anim) : { width: 0, height: 0 }
+
+    const style = {
+      width: '100%',
+      height: '100%',
+      backgroundImage: `url(${spritesheetUrl})`,
+      backgroundPosition: `-${frame.x}px -${frame.y}px`,
+      backgroundSize: `${size.width}px ${size.height}px`,
+      imageRendering: 'pixelated'
+    }
+
+    if (anim._mirror) {
+      style.transform = 'scaleX(-1)'
+    }
+
+    return style
+  }
+
   return {
     // State
     playMode,
@@ -743,7 +1256,25 @@ export function usePlayMode(options = {}) {
     changeSceneWithTransition,
 
     // Object detection
-    findObjectAtPoint
+    findObjectAtPoint,
+
+    // Item interaction
+    useItemWith,
+    executeItemUsage,
+
+    // Puzzle system
+    checkPuzzleConditions,
+    attemptPuzzle,
+    solvePuzzle,
+
+    // Click handlers
+    onPlayModeClick,
+    handleObjectInteraction,
+    executeInteractionAction,
+
+    // Player animation
+    getPlayerCurrentAnimation,
+    getPlayerAnimationStyle
   }
 }
 

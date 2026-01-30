@@ -352,35 +352,30 @@ const globalVerbs = computed(() => project.value.globalData?.verbs || [])
 const globalVariables = computed(() => project.value.globalData?.variables || {})
 
 // =====================
-// UNDO/REDO SYSTEM
+// UNDO/REDO SYSTEM (via useUndoRedo composable)
 // =====================
-const MAX_HISTORY = 50
-const historyStack = ref([])
-const historyIndex = ref(-1)
-const isUndoRedoAction = ref(false)
+const {
+  saveToHistory,
+  undo: undoFromComposable,
+  redo: redoFromComposable,
+  canUndo,
+  canRedo,
+  clearHistory,
+  initHistory,
+  cleanup: cleanupUndoRedo,
+  isUndoRedoAction,
+  historyStack,
+  historyIndex
+} = useUndoRedo(currentScene, {
+  maxHistory: 50,
+  debounceMs: 500,
+  onUndo: () => { selectedElements.value = [] },
+  onRedo: () => { selectedElements.value = [] }
+})
 
-// Deep clone helper
-const deepClone = (obj) => JSON.parse(JSON.stringify(obj))
-
-// Save current state to history
-const saveToHistory = () => {
-  if (isUndoRedoAction.value) return
-
-  // Remove any future states if we're not at the end
-  if (historyIndex.value < historyStack.value.length - 1) {
-    historyStack.value = historyStack.value.slice(0, historyIndex.value + 1)
-  }
-
-  // Add current state
-  historyStack.value.push(deepClone(currentScene.value))
-
-  // Limit history size
-  if (historyStack.value.length > MAX_HISTORY) {
-    historyStack.value.shift()
-  }
-
-  historyIndex.value = historyStack.value.length - 1
-}
+// Wrapper functions to include selectedElements clearing
+const undo = () => undoFromComposable()
+const redo = () => redoFromComposable()
 
 // Check if ID looks like a UUID (from backend)
 const isUUID = (id) => {
@@ -555,53 +550,27 @@ onMounted(async () => {
   }
 
   // Initialize history
-  saveToHistory()
+  initHistory()
 })
 
-// Undo action
-const undo = () => {
-  if (!canUndo.value) return
-
-  isUndoRedoAction.value = true
-  historyIndex.value--
-  currentScene.value = deepClone(historyStack.value[historyIndex.value])
-  selectedElements.value = []
-
-  setTimeout(() => { isUndoRedoAction.value = false }, 0)
-}
-
-// Redo action
-const redo = () => {
-  if (!canRedo.value) return
-
-  isUndoRedoAction.value = true
-  historyIndex.value++
-  currentScene.value = deepClone(historyStack.value[historyIndex.value])
-  selectedElements.value = []
-
-  setTimeout(() => { isUndoRedoAction.value = false }, 0)
-}
-
-// Computed properties for undo/redo availability
-const canUndo = computed(() => historyIndex.value > 0)
-const canRedo = computed(() => historyIndex.value < historyStack.value.length - 1)
-
-// Watch for scene changes (debounced save to history + auto-save to DB)
-let saveTimeout = null
-let autoSaveTimeout = null
+// Mounted state for cleanup
 let isMounted = true
+let autoSaveTimeout = null
+let historyTimeout = null
 const AUTO_SAVE_DEBOUNCE = 3000 // 3 seconds
+const HISTORY_DEBOUNCE = 500 // 500ms for history save
 
+// Watch for scene changes - debounced history save and auto-save to MongoDB
 watch(currentScene, () => {
   if (isUndoRedoAction.value || !isMounted) return
 
   // Debounce history save (500ms)
-  clearTimeout(saveTimeout)
-  saveTimeout = setTimeout(() => {
+  clearTimeout(historyTimeout)
+  historyTimeout = setTimeout(() => {
     if (isMounted) {
       saveToHistory()
     }
-  }, 500)
+  }, HISTORY_DEBOUNCE)
 
   // Debounce auto-save to MongoDB (3 seconds)
   clearTimeout(autoSaveTimeout)
@@ -807,6 +776,9 @@ const getAudioAssetById = (audioId) => {
 }
 
 // Initialize play mode composable
+// Late-binding reference for startCutscene (initialized after useCutsceneEngine)
+let startCutsceneRef = null
+
 const {
   playMode,
   playModeState,
@@ -840,14 +812,34 @@ const {
   fadeOut,
   fadeIn,
   changeSceneWithTransition: changeSceneWithTransitionFromComposable,
-  findObjectAtPoint
+  findObjectAtPoint,
+  // New interaction handlers
+  useItemWith,
+  executeItemUsage,
+  checkPuzzleConditions,
+  attemptPuzzle,
+  solvePuzzle,
+  onPlayModeClick,
+  handleObjectInteraction,
+  executeInteractionAction,
+  getPlayerCurrentAnimation,
+  getPlayerAnimationStyle
 } = usePlayMode({
   currentScene,
   project,
   selectedElements,
   getAudioAssetById,
   switchScene: (sceneId) => switchScene(sceneId),
-  getSceneCoords
+  getSceneCoords,
+  // Late-binding wrapper for startCutscene
+  startCutscene: (cutscene) => startCutsceneRef?.(cutscene),
+  // Animation helpers
+  getAnimationIdFromAssignment,
+  isAnimationMirrored,
+  getAnimationSpritesheetUrl,
+  getAnimationSpritesheetSize,
+  globalAnimations,
+  actorPreviewFrames
 })
 
 // Initialize cutscene engine composable
@@ -879,6 +871,9 @@ const {
   fadeOut,
   changeSceneWithTransition: (sceneId) => changeSceneWithTransition(sceneId)
 })
+
+// Assign late-binding reference for usePlayMode interaction handlers
+startCutsceneRef = startCutscene
 
 // Initialize context menu and grouping composable
 const {
@@ -1172,518 +1167,10 @@ setupAutoSaveWatcher()
 // =====================
 // PLAY MODE - INTERACTION HANDLERS
 // =====================
-// NOTE: Core play mode logic is in usePlayMode and useCutsceneEngine composables.
-// The following inline code handles complex interaction logic that uses composable functions.
-
-// Use item with object
-const useItemWith = (item, targetObj) => {
-  // Check if item can be used with target
-  const useWith = item.useWith || []
-  const targetName = targetObj.element?.name || targetObj.type
-
-  // Check for matching useWith entry
-  for (const usage of useWith) {
-    if (usage.target === targetName || usage.targetId === targetObj.element?.id) {
-      // Execute the result
-      executeItemUsage(item, usage)
-      playModeState.value.selectedItem = null
-      return true
-    }
-  }
-
-  showPlayMessage(`I can't use ${item.name} with that.`)
-  playModeState.value.selectedItem = null
-  return false
-}
-
-// Execute item usage result
-const executeItemUsage = (item, usage) => {
-  if (usage.message) {
-    showPlayMessage(usage.message)
-  }
-  if (usage.removeItem) {
-    playRemoveFromInventory(item.id)
-  }
-  if (usage.addItem) {
-    playAddToInventory(usage.addItem)
-  }
-  if (usage.setVariable) {
-    playModeState.value.variables[usage.setVariable] = usage.variableValue ?? true
-  }
-  if (usage.triggerCutscene) {
-    const cutscene = currentScene.value.cutscenes?.find(c => c.id === usage.triggerCutscene)
-    if (cutscene) startCutscene(cutscene)
-  }
-  if (usage.solvePuzzle) {
-    solvePuzzle(usage.solvePuzzle)
-  }
-}
-
-// =====================
-// PUZZLE SYSTEM
-// =====================
-
-// Check puzzle conditions
-const checkPuzzleConditions = (puzzle) => {
-  if (!puzzle.conditions) return true
-
-  for (const condition of puzzle.conditions) {
-    switch (condition.type) {
-      case 'has-item':
-        if (!hasItem(condition.itemId)) return false
-        break
-      case 'variable':
-        if (playModeState.value.variables[condition.variable] !== condition.value) return false
-        break
-      case 'puzzle-solved':
-        const otherPuzzle = currentScene.value.puzzles?.find(p => p.id === condition.puzzleId)
-        if (!otherPuzzle?.solved) return false
-        break
-    }
-  }
-  return true
-}
-
-// Attempt to solve a puzzle
-const attemptPuzzle = (puzzle) => {
-  if (puzzle.solved) {
-    showPlayMessage("Already solved.")
-    return
-  }
-
-  if (!checkPuzzleConditions(puzzle)) {
-    // Show hint if available
-    const hint = puzzle.hints?.[0]
-    showPlayMessage(hint || "Something is missing...")
-    return
-  }
-
-  solvePuzzle(puzzle.id)
-}
-
-// Mark puzzle as solved and execute results
-const solvePuzzle = (puzzleId) => {
-  const puzzle = currentScene.value.puzzles?.find(p => p.id === puzzleId)
-  if (!puzzle || puzzle.solved) return
-
-  puzzle.solved = true
-  showPlayMessage(puzzle.result?.message || "Puzzle solved!")
-
-  // Execute puzzle results
-  if (puzzle.result) {
-    if (puzzle.result.addItem) {
-      playAddToInventory(puzzle.result.addItem)
-    }
-    if (puzzle.result.removeItem) {
-      playRemoveFromInventory(puzzle.result.removeItem)
-    }
-    if (puzzle.result.setVariable) {
-      playModeState.value.variables[puzzle.result.setVariable] = puzzle.result.variableValue ?? true
-    }
-    if (puzzle.result.triggerCutscene) {
-      const cutscene = currentScene.value.cutscenes?.find(c => c.id === puzzle.result.triggerCutscene)
-      if (cutscene) startCutscene(cutscene)
-    }
-    if (puzzle.result.playSFX) {
-      playSFX(puzzle.result.playSFX)
-    }
-  }
-}
-
-// Handle click in play mode
-const onPlayModeClick = (event) => {
-  if (!playMode.value) return
-
-  const coords = getSceneCoords(event)
-
-  // If dialog is active, advance it
-  if (playModeState.value.currentDialog) {
-    advanceDialog()
-    return
-  }
-
-  // Check if clicking on an interactive object
-  const clickedObject = findObjectAtPoint(coords.x, coords.y)
-
-  if (clickedObject) {
-    handleObjectInteraction(clickedObject)
-  } else {
-    // Walk to clicked point
-    walkToPoint(coords.x, coords.y)
-  }
-}
-
-// Handle interaction with an object
-const handleObjectInteraction = (obj) => {
-  // If using an item, handle "Use X with Y"
-  if (playModeState.value.selectedItem) {
-    const item = project.value.globalData.items.find(i => i.id === playModeState.value.selectedItem)
-    if (item) {
-      useItemWith(item, obj)
-      return
-    }
-  }
-
-  const verb = project.value.globalData.verbs.find(v => v.id === playModeState.value.selectedVerb)
-  const verbName = verb?.name?.toLowerCase() || 'look at'
-  const verbId = verb?.id || 1
-
-  // =====================
-  // CHECK CUSTOM INTERACTIONS FIRST
-  // =====================
-  if ((obj.type === 'hotspot' || obj.type === 'image') && obj.element.interactions?.length > 0) {
-    // Find interaction for this verb
-    const interaction = obj.element.interactions.find(i => i.verbId === verbId)
-
-    if (interaction) {
-      // Check condition if exists
-      if (interaction.hasCondition && interaction.condition) {
-        const varValue = playModeState.value.variables[interaction.condition.varName]
-        const condValue = interaction.condition.value
-        let conditionMet = false
-
-        switch (interaction.condition.operator) {
-          case '==': conditionMet = varValue == condValue; break
-          case '!=': conditionMet = varValue != condValue; break
-          case '>': conditionMet = Number(varValue) > Number(condValue); break
-          case '<': conditionMet = Number(varValue) < Number(condValue); break
-          case '>=': conditionMet = Number(varValue) >= Number(condValue); break
-          case '<=': conditionMet = Number(varValue) <= Number(condValue); break
-        }
-
-        if (!conditionMet) {
-          // Condition not met, use default behavior or show nothing
-          showPlayMessage("Nothing happens.")
-          return
-        }
-      }
-
-      // Execute the interaction action
-      executeInteractionAction(interaction, obj)
-      return
-    }
-  }
-
-  // Check for description (default "look at" response)
-  // Support both English and Spanish verb names
-  const isLookVerb = verbName === 'look at' || verbName === 'look' || verbName === 'examine' ||
-                     verbName === 'mirar' || verbName === 'examinar' || verbName === 'ver' ||
-                     verbId === 1 // First verb is usually "look"
-  if (isLookVerb &&
-      (obj.type === 'hotspot' || obj.type === 'image') &&
-      obj.element.description) {
-    showPlayMessage(obj.element.description)
-    return
-  }
-
-  // Check for puzzle interaction
-  if (obj.type === 'hotspot' || obj.type === 'image') {
-    const puzzle = currentScene.value.puzzles?.find(p =>
-      p.triggerObject === obj.element.id ||
-      p.triggerObject === obj.element.name
-    )
-    if (puzzle && (verbName === 'use' || verbName === 'open' || verbName === 'push' || verbName === 'pull')) {
-      attemptPuzzle(puzzle)
-      return
-    }
-  }
-
-  // Check for cutscene trigger
-  if (obj.type === 'hotspot' || obj.type === 'image' || obj.type === 'actor') {
-    const cutscene = currentScene.value.cutscenes?.find(c =>
-      c.trigger === 'object-interact' &&
-      c.triggerTarget === obj.element.id
-    )
-    if (cutscene && !cutscene.hasPlayed) {
-      cutscene.hasPlayed = true
-      startCutscene(cutscene)
-      return
-    }
-  }
-
-  // Helper functions to detect verb types (supports English and Spanish)
-  const isLookVerbType = ['look at', 'look', 'examine', 'mirar', 'examinar', 'ver'].includes(verbName)
-  const isWalkVerbType = ['walk to', 'walk', 'go', 'ir', 'caminar', 'ir a'].includes(verbName)
-  const isPickupVerbType = ['pick up', 'take', 'get', 'recoger', 'tomar', 'coger', 'agarrar'].includes(verbName)
-  const isTalkVerbType = ['talk to', 'talk', 'speak', 'hablar', 'hablar con', 'conversar'].includes(verbName)
-  const isUseVerbType = ['use', 'usar', 'utilizar'].includes(verbName)
-  const isOpenVerbType = ['open', 'abrir'].includes(verbName)
-  const isCloseVerbType = ['close', 'cerrar'].includes(verbName)
-  const isPushPullVerbType = ['push', 'pull', 'empujar', 'tirar', 'jalar'].includes(verbName)
-  const isGiveVerbType = ['give', 'dar', 'entregar'].includes(verbName)
-
-  // Default interactions based on verb type
-  if (isLookVerbType) {
-    // Check for examine dialog on item
-    if (obj.element.examineDialog) {
-      showPlayMessage(obj.element.examineDialog)
-    } else if (obj.element.description) {
-      showPlayMessage(obj.element.description)
-    } else {
-      showPlayMessage(`Es ${obj.element.name || obj.type}.`)
-    }
-  } else if (isWalkVerbType) {
-    if (obj.type === 'exit') {
-      if (obj.element.targetScene) {
-        changeSceneWithTransition(obj.element.targetScene)
-      } else {
-        showPlayMessage("Esta salida no lleva a ningún lado.")
-      }
-    } else {
-      walkToPoint(obj.element.x + (obj.element.w || 0) / 2, obj.element.y + (obj.element.h || 0))
-    }
-  } else if (isPickupVerbType) {
-    if (obj.type === 'image' && obj.element.pickable) {
-      // Find corresponding item
-      const item = project.value.globalData.items.find(i =>
-        i.name === obj.element.name || i.linkedImageId === obj.element.id
-      )
-      if (item) {
-        playAddToInventory(item.id)
-        // Hide the image (picked up)
-        obj.element.visible = false
-        if (item.pickupDialog) {
-          showPlayMessage(item.pickupDialog)
-        }
-      } else {
-        playAddToInventory(obj.element.id)  // Use element id as item
-        showPlayMessage(`Recogido: ${obj.element.name}`)
-      }
-    } else {
-      showPlayMessage("No puedo recoger eso.")
-    }
-  } else if (isTalkVerbType) {
-    if (obj.type === 'actor') {
-      const dialog = currentScene.value.dialogs.find(d => d.actor === obj.element.actorId)
-      if (dialog) {
-        startDialog(dialog)
-      } else {
-        showPlayMessage("No parece querer hablar.")
-      }
-    } else {
-      showPlayMessage("No puedo hablar con eso.")
-    }
-  } else if (isUseVerbType) {
-    // Try to use the object directly
-    if (obj.type === 'exit') {
-      if (obj.element.targetScene) {
-        changeSceneWithTransition(obj.element.targetScene)
-      } else {
-        showPlayMessage("Esta salida no lleva a ningún lado.")
-      }
-    } else {
-      showPlayMessage("Necesito usar algo con eso.")
-    }
-  } else if (isOpenVerbType) {
-    showPlayMessage("No puedo abrir eso.")
-  } else if (isCloseVerbType) {
-    showPlayMessage("No puedo cerrar eso.")
-  } else if (isPushPullVerbType) {
-    showPlayMessage("No se mueve.")
-  } else if (isGiveVerbType) {
-    showPlayMessage("No puedo dar eso.")
-  } else {
-    // Default fallback
-    showPlayMessage(`No puedo hacer eso.`)
-  }
-}
-
-// Execute an interaction action
-const executeInteractionAction = (interaction, obj) => {
-  const params = interaction.params || {}
-
-  switch (interaction.action) {
-    case 'dialog':
-      // Show dialog text
-      if (params.text) {
-        if (params.actorId) {
-          const actor = project.value.globalData.actors.find(a => a.id === params.actorId)
-          showPlayMessage(`${actor?.name || 'Someone'}: "${params.text}"`)
-        } else {
-          showPlayMessage(params.text)
-        }
-      }
-      break
-
-    case 'dialogRef':
-      // Play a dialog from the scene's dialog list
-      if (params.dialogId) {
-        const dialog = currentScene.value.dialogs.find(d => d.id === params.dialogId)
-        if (dialog) {
-          startDialog(dialog)
-        }
-      }
-      break
-
-    case 'cutscene':
-      // Play a cutscene
-      if (params.cutsceneId) {
-        const cutscene = currentScene.value.cutscenes.find(c => c.id === params.cutsceneId)
-        if (cutscene) {
-          startCutscene(cutscene)
-        }
-      }
-      break
-
-    case 'pickup':
-      // Pick up an item
-      if (params.itemId) {
-        playAddToInventory(params.itemId)
-        const item = project.value.globalData.items.find(i => i.id === params.itemId)
-        showPlayMessage(`Picked up: ${item?.name || 'item'}`)
-
-        // Optionally hide the element
-        if (params.removeFromScene && obj.element) {
-          obj.element.visible = false
-        }
-      }
-      break
-
-    case 'use_item':
-      // Check if player has required item
-      if (params.requiredItemId) {
-        const hasItem = playModeState.value.inventory.includes(params.requiredItemId)
-        if (hasItem) {
-          showPlayMessage(params.successText || "It worked!")
-        } else {
-          showPlayMessage(params.failText || "I need something to use with this.")
-        }
-      }
-      break
-
-    case 'change_scene':
-      // Change to another scene
-      if (params.sceneId) {
-        changeSceneWithTransition(params.sceneId)
-      }
-      break
-
-    case 'set_variable':
-      // Set a game variable
-      if (params.varName) {
-        if (!playModeState.value.variables) {
-          playModeState.value.variables = {}
-        }
-        playModeState.value.variables[params.varName] = params.varValue
-        console.log(`[PlayMode] Variable set: ${params.varName} = ${params.varValue}`)
-      }
-      break
-
-    case 'custom':
-      // Custom script (basic eval - be careful!)
-      if (params.script) {
-        try {
-          // Create a safe context with game functions
-          const context = {
-            showMessage: showPlayMessage,
-            setVariable: (name, value) => {
-              if (!playModeState.value.variables) playModeState.value.variables = {}
-              playModeState.value.variables[name] = value
-            },
-            getVariable: (name) => playModeState.value.variables?.[name],
-            addItem: playAddToInventory,
-            hasItem: (id) => playModeState.value.inventory.includes(id),
-            changeScene: changeSceneWithTransition
-          }
-          // Execute script with context
-          const fn = new Function(...Object.keys(context), params.script)
-          fn(...Object.values(context))
-        } catch (e) {
-          console.error('[PlayMode] Custom script error:', e)
-        }
-      }
-      break
-
-    default:
-      showPlayMessage("Nothing happens.")
-  }
-}
-
-// Get current animation for player based on state
-const getPlayerCurrentAnimation = () => {
-  const playerActor = getPlayerActor.value
-  if (!playerActor || !playerActor.animations) return null
-
-  const state = playModeState.value.playerState || 'idle'
-  const assignment = playerActor.animations[state]
-
-  // Only return animation if it exists for the current state
-  if (!assignment) return null
-
-  // Handle both old format (just ID) and new format ({ id, mirror })
-  const animId = getAnimationIdFromAssignment(assignment)
-  if (!animId) return null
-
-  const mirror = isAnimationMirrored(assignment)
-
-  // Search in global animations first, then scene animations for backward compatibility
-  const anim = globalAnimations.value.find(a => a.id === animId) ||
-               currentScene.value.animations?.find(a => a.id === animId)
-
-  if (!anim) return null
-
-  // Return animation with mirror info attached
-  return { ...anim, _mirror: mirror }
-}
-
-// Get style for player animation frame
-const getPlayerAnimationStyle = () => {
-  const anim = getPlayerCurrentAnimation()
-  if (!anim || !anim.frames || anim.frames.length === 0) return {}
-
-  const spritesheetUrl = getAnimationSpritesheetUrl(anim)
-  if (!spritesheetUrl) return {}
-
-  // Use actor preview frames for animation timing
-  const playerActor = getPlayerActor.value
-  const frameIndex = actorPreviewFrames.value[playerActor?.id] || 0
-  const frame = anim.frames[frameIndex % anim.frames.length]
-  const size = getAnimationSpritesheetSize(anim)
-
-  const style = {
-    width: '100%',
-    height: '100%',
-    backgroundImage: `url(${spritesheetUrl})`,
-    backgroundPosition: `-${frame.x}px -${frame.y}px`,
-    backgroundSize: `${size.width}px ${size.height}px`,
-    imageRendering: 'pixelated'
-  }
-
-  // Apply mirror transform if needed
-  if (anim._mirror) {
-    style.transform = 'scaleX(-1)'
-  }
-
-  return style
-}
-
-// Walk animation loop
-let walkAnimationFrame = null
-const startWalkLoop = () => {
-  const loop = () => {
-    if (playMode.value) {
-      updateWalk()
-      walkAnimationFrame = requestAnimationFrame(loop)
-    }
-  }
-  walkAnimationFrame = requestAnimationFrame(loop)
-}
-
-const stopWalkLoop = () => {
-  if (walkAnimationFrame) {
-    cancelAnimationFrame(walkAnimationFrame)
-    walkAnimationFrame = null
-  }
-}
-
-// Watch play mode to start/stop walk loop
-watch(playMode, (isPlaying) => {
-  if (isPlaying) {
-    startWalkLoop()
-  } else {
-    stopWalkLoop()
-  }
-})
+// NOTE: Play mode interaction logic is now in usePlayMode composable.
+// Functions available: useItemWith, executeItemUsage, checkPuzzleConditions,
+// attemptPuzzle, solvePuzzle, onPlayModeClick, handleObjectInteraction,
+// executeInteractionAction, getPlayerCurrentAnimation, getPlayerAnimationStyle
 
 // Particle and lighting functions from composables:
 // - activeParticles, getParticleStyle, updateParticles, startResizeParticle from useParticleSystem
@@ -2201,10 +1688,13 @@ onUnmounted(() => {
   // Mark as unmounted to prevent any pending operations
   isMounted = false
 
-  // Clear pending timeout to prevent accessing destroyed refs
-  if (saveTimeout) {
-    clearTimeout(saveTimeout)
-    saveTimeout = null
+  // Cleanup useUndoRedo composable
+  cleanupUndoRedo()
+
+  // Clear history save timeout
+  if (historyTimeout) {
+    clearTimeout(historyTimeout)
+    historyTimeout = null
   }
 
   // Clear MongoDB auto-save timeout
