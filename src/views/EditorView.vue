@@ -8,6 +8,13 @@ import { useUndoRedo } from '@/composables/useUndoRedo'
 import { useKeyboardShortcuts, createEditorShortcuts } from '@/composables/useKeyboardShortcuts'
 import { useElementSelection } from '@/composables/useElementSelection'
 import { usePanelState } from '@/composables/usePanelState'
+import { useCanvasZoom } from '@/composables/useCanvasZoom'
+import { useParticleSystem, particlePresets } from '@/composables/useParticleSystem'
+import { useLighting, lightTypes } from '@/composables/useLighting'
+import { useAudioPlayback } from '@/composables/useAudioPlayback'
+import { useElementCRUD } from '@/composables/useElementCRUD'
+import { usePlayMode } from '@/composables/usePlayMode'
+import { useCutsceneEngine } from '@/composables/useCutsceneEngine'
 
 // Refactored components
 import {
@@ -654,7 +661,23 @@ watch(currentScene, () => {
 
 // UI state (panel state from usePanelState composable)
 const canvasRef = ref(null) // Canvas DOM reference for coordinate calculations
-const zoom = ref(1.0) // Start at 100%
+
+// Initialize canvas zoom composable
+const {
+  zoom,
+  zoomIn,
+  zoomOut,
+  setZoom,
+  resetZoom,
+  zoomPercent,
+  canZoomIn,
+  canZoomOut
+} = useCanvasZoom({
+  defaultZoom: 1.0,
+  minZoom: 0.1,
+  maxZoom: 2.0,
+  zoomStep: 0.1
+})
 
 // Helper: Get element by type and ID (needed for selection composable)
 const getElementByTypeAndId = (type, id) => {
@@ -715,275 +738,130 @@ const {
   getElementByTypeAndId
 })
 
-// =====================
-// PLAY MODE
-// =====================
-const playMode = ref(false)
-const playModeState = ref({
-  // Player state
-  playerActorId: null,
-  playerPlacementId: null,  // ID of the actor placement being controlled
-  playerPosition: { x: 400, y: 600 },
-  playerSize: { w: 64, h: 64 },  // Dimensions from actor placement
-  playerDirection: 'south',
-  playerState: 'idle',
-
-  // Interaction
-  selectedVerb: null,
-  hoveredObject: null,
-  selectedItem: null,         // Item selected for "Use X with Y"
-
-  // Dialog
-  currentDialog: null,
-  dialogLineIndex: 0,
-  dialogChoices: null,        // Current choice options
-
-  // Movement
-  isWalking: false,
-  walkTarget: null,
-  walkCallback: null,         // Function to call when walk completes
-
-  // Messages
-  messageText: '',
-  messageTimeout: null,
-
-  // Cutscene
-  currentCutscene: null,
-  cutsceneActionIndex: 0,
-  cutsceneTimeout: null,
-  isCutscenePlaying: false,
-
-  // Transitions
-  fadeOverlay: 0,             // 0 = transparent, 1 = fully black
-  isFading: false,
-
-  // Audio
-  currentMusic: null,         // Currently playing music element
-  musicAudio: null,           // HTML Audio element for music
-
-  // Game state (copied from project for runtime modifications)
-  inventory: [],              // Runtime copy of inventory
-  variables: {}               // Runtime copy of game variables
+// Initialize element CRUD composable (copy/paste/delete)
+const {
+  clipboard,
+  hasClipboard,
+  addElement,
+  deleteElement,
+  deleteSelectedElements,
+  copyToClipboard,
+  pasteFromClipboard,
+  duplicateElements,
+  duplicateElement,
+  generateId,
+  createDefaultElement
+} = useElementCRUD({
+  currentScene,
+  globalData: computed(() => project.value?.globalData),
+  selectedElements,
+  defaultWidth: computed(() => currentScene.value?.width || 1920),
+  defaultHeight: computed(() => currentScene.value?.height || 1200)
 })
 
-// Enter play mode
+// Helper for audio asset lookup (needed by usePlayMode)
+const getAudioAssetById = (audioId) => {
+  return project.value?.globalData?.audioAssets?.find(a => a.id === audioId)
+}
+
+// Initialize play mode composable
+const {
+  playMode,
+  playModeState,
+  getPlayerActor,
+  getPlayerPlacement,
+  getCurrentDialogLine,
+  getInventoryItems,
+  enterPlayMode: enterPlayModeFromComposable,
+  exitPlayMode: exitPlayModeFromComposable,
+  stopPlayModeAudio,
+  playSceneMusic,
+  playMusic,
+  stopMusic,
+  playSFX,
+  playAddToInventory,
+  playRemoveFromInventory,
+  hasItem,
+  selectInventoryItem,
+  setVariable,
+  getVariable,
+  checkVariable,
+  isPointInWalkbox,
+  isPointInPolygon,
+  findClosestWalkablePoint,
+  walkToPoint,
+  updateWalk,
+  startDialog,
+  advanceDialog,
+  showPlayMessage,
+  selectVerb,
+  fadeOut,
+  fadeIn,
+  changeSceneWithTransition: changeSceneWithTransitionFromComposable,
+  findObjectAtPoint
+} = usePlayMode({
+  currentScene,
+  project,
+  selectedElements,
+  getAudioAssetById,
+  switchScene: (sceneId) => switchScene(sceneId),
+  getSceneCoords
+})
+
+// Initialize cutscene engine composable
+const {
+  startCutscene,
+  executeCutsceneAction,
+  advanceCutscene,
+  endCutscene,
+  skipCutscene,
+  checkSceneEnterTriggers,
+  checkObjectInteractionTrigger,
+  checkPuzzleSolvedTrigger,
+  createCutscene,
+  createCutsceneAction,
+  getActionTypes,
+  getTriggerTypes
+} = useCutsceneEngine({
+  currentScene,
+  project,
+  playModeState,
+  playMusic,
+  stopMusic,
+  playSFX,
+  showPlayMessage,
+  walkToPoint,
+  playAddToInventory,
+  playRemoveFromInventory,
+  fadeIn,
+  fadeOut,
+  changeSceneWithTransition: (sceneId) => changeSceneWithTransition(sceneId)
+})
+
+// Wrapper functions for enter/exit play mode with cutscene triggers
 const enterPlayMode = () => {
-  // Check if there's at least one actor to play with
-  const hasActorPlacement = currentScene.value.actorPlacements?.length > 0
-  const hasGlobalActor = project.value.globalData.actors?.length > 0
-
-  if (!hasActorPlacement && !hasGlobalActor) {
-    alert('¡No hay ningún actor en la escena!\n\nPara jugar, primero debes:\n1. Crear un Actor en "Global Actors"\n2. Agregar un "Actor Placement" en la escena')
-    return
-  }
-
-  // Find player actor (first actor placement, or first global actor)
-  const firstPlacement = currentScene.value.actorPlacements[0]
-  if (firstPlacement) {
-    playModeState.value.playerActorId = firstPlacement.actorId
-    playModeState.value.playerPlacementId = firstPlacement.id  // Track which placement is being controlled
-    playModeState.value.playerPosition = { x: firstPlacement.x + firstPlacement.w / 2, y: firstPlacement.y + firstPlacement.h }
-    playModeState.value.playerSize = { w: firstPlacement.w, h: firstPlacement.h }
-    playModeState.value.playerDirection = firstPlacement.direction || 'south'
-  } else if (project.value.globalData.actors.length > 0) {
-    playModeState.value.playerActorId = project.value.globalData.actors[0].id
-    playModeState.value.playerPlacementId = null
-    playModeState.value.playerPosition = { x: currentScene.value.width / 2, y: currentScene.value.height / 2 }
-    playModeState.value.playerSize = { w: 64, h: 64 }
-  }
-
-  // Reset player state
-  playModeState.value.playerState = 'idle'
-  playModeState.value.selectedVerb = project.value.globalData.verbs[0]?.id || null
-  playModeState.value.hoveredObject = null
-  playModeState.value.selectedItem = null
-  playModeState.value.isWalking = false
-  playModeState.value.walkCallback = null
-  playModeState.value.messageText = ''
-
-  // Reset dialog
-  playModeState.value.currentDialog = null
-  playModeState.value.dialogLineIndex = 0
-  playModeState.value.dialogChoices = null
-
-  // Reset cutscene
-  playModeState.value.currentCutscene = null
-  playModeState.value.cutsceneActionIndex = 0
-  playModeState.value.isCutscenePlaying = false
-  if (playModeState.value.cutsceneTimeout) {
-    clearTimeout(playModeState.value.cutsceneTimeout)
-  }
-
-  // Reset transitions
-  playModeState.value.fadeOverlay = 0
-  playModeState.value.isFading = false
-
-  // Initialize runtime game state (copy from project)
-  playModeState.value.inventory = [...(project.value.globalData.inventory || [])]
-  playModeState.value.variables = { ...(project.value.globalData.variables || {}) }
-
-  // Stop any playing audio
-  stopPlayModeAudio()
-
-  playMode.value = true
-  selectedElements.value = []
-
-  // Check for scene-enter cutscenes
-  checkSceneEnterTriggers()
-
-  // Start scene music if configured
-  playSceneMusic()
+  return enterPlayModeFromComposable({
+    checkSceneEnterTriggers
+  })
 }
 
-// Exit play mode
 const exitPlayMode = () => {
-  playMode.value = false
-  playModeState.value.isWalking = false
-  playModeState.value.currentDialog = null
-  playModeState.value.isCutscenePlaying = false
+  exitPlayModeFromComposable()
+}
 
-  if (playModeState.value.messageTimeout) {
-    clearTimeout(playModeState.value.messageTimeout)
-  }
-  if (playModeState.value.cutsceneTimeout) {
-    clearTimeout(playModeState.value.cutsceneTimeout)
-  }
-
-  // Stop all audio
-  stopPlayModeAudio()
+// Wrapper for changeSceneWithTransition
+const changeSceneWithTransition = (sceneId) => {
+  changeSceneWithTransitionFromComposable(sceneId, {
+    checkSceneEnterTriggers,
+    onCutsceneAdvance: advanceCutscene
+  })
 }
 
 // =====================
-// AUDIO SYSTEM
+// PLAY MODE - INTERACTION HANDLERS
 // =====================
-
-// Stop all play mode audio
-const stopPlayModeAudio = () => {
-  if (playModeState.value.musicAudio) {
-    playModeState.value.musicAudio.pause()
-    playModeState.value.musicAudio = null
-  }
-  playModeState.value.currentMusic = null
-}
-
-// Play scene music (if configured)
-const playSceneMusic = () => {
-  const musicEntry = currentScene.value.music?.[0]  // Play first music entry
-  if (musicEntry?.audioAssetId) {
-    playMusic(musicEntry)
-  }
-}
-
-// Play a music track
-const playMusic = (musicEntry) => {
-  const audioAsset = getAudioAssetById(musicEntry.audioAssetId)
-  if (!audioAsset) return
-
-  // Stop current music
-  if (playModeState.value.musicAudio) {
-    playModeState.value.musicAudio.pause()
-  }
-
-  const audio = new Audio(audioAsset.data)
-  audio.volume = (musicEntry.volume || 100) / 100
-  audio.loop = musicEntry.loop !== false
-  audio.play().catch(() => {})  // Ignore autoplay restrictions
-
-  playModeState.value.musicAudio = audio
-  playModeState.value.currentMusic = musicEntry
-}
-
-// Stop music
-const stopMusic = (fadeOut = 0) => {
-  if (!playModeState.value.musicAudio) return
-
-  if (fadeOut > 0) {
-    const audio = playModeState.value.musicAudio
-    const startVolume = audio.volume
-    const fadeStep = startVolume / (fadeOut / 50)
-    const fadeInterval = setInterval(() => {
-      audio.volume = Math.max(0, audio.volume - fadeStep)
-      if (audio.volume <= 0) {
-        clearInterval(fadeInterval)
-        audio.pause()
-        playModeState.value.musicAudio = null
-        playModeState.value.currentMusic = null
-      }
-    }, 50)
-  } else {
-    playModeState.value.musicAudio.pause()
-    playModeState.value.musicAudio = null
-    playModeState.value.currentMusic = null
-  }
-}
-
-// Play a sound effect
-const playSFX = (sfxIdOrEntry) => {
-  let audioAssetId
-  let volume = 100
-
-  if (typeof sfxIdOrEntry === 'object') {
-    audioAssetId = sfxIdOrEntry.audioAssetId
-    volume = sfxIdOrEntry.volume || 100
-  } else {
-    const sfxEntry = currentScene.value.sfx?.find(s => s.id === sfxIdOrEntry)
-    audioAssetId = sfxEntry?.audioAssetId
-    volume = sfxEntry?.volume || 100
-  }
-
-  const audioAsset = getAudioAssetById(audioAssetId)
-  if (!audioAsset) return
-
-  const audio = new Audio(audioAsset.data)
-  audio.volume = volume / 100
-  audio.play().catch(() => {})
-}
-
-// =====================
-// INVENTORY SYSTEM (Play Mode)
-// =====================
-
-// Add item to play mode inventory
-const playAddToInventory = (itemId) => {
-  if (!playModeState.value.inventory.includes(itemId)) {
-    playModeState.value.inventory.push(itemId)
-    const item = project.value.globalData.items.find(i => i.id === itemId)
-    if (item) {
-      showPlayMessage(`Picked up: ${item.name}`)
-    }
-  }
-}
-
-// Remove item from play mode inventory
-const playRemoveFromInventory = (itemId) => {
-  const index = playModeState.value.inventory.indexOf(itemId)
-  if (index > -1) {
-    playModeState.value.inventory.splice(index, 1)
-  }
-}
-
-// Check if player has item
-const hasItem = (itemId) => {
-  return playModeState.value.inventory.includes(itemId)
-}
-
-// Get inventory items (full data)
-const getInventoryItems = computed(() => {
-  return playModeState.value.inventory
-    .map(id => project.value.globalData.items.find(i => i.id === id))
-    .filter(Boolean)
-})
-
-// Select inventory item for "Use X with Y"
-const selectInventoryItem = (itemId) => {
-  if (playModeState.value.selectedItem === itemId) {
-    playModeState.value.selectedItem = null
-  } else {
-    playModeState.value.selectedItem = itemId
-    const item = project.value.globalData.items.find(i => i.id === itemId)
-    showPlayMessage(`Using ${item?.name}...`)
-  }
-}
+// NOTE: Core play mode logic is in usePlayMode and useCutsceneEngine composables.
+// The following inline code handles complex interaction logic that uses composable functions.
 
 // Use item with object
 const useItemWith = (item, targetObj) => {
@@ -1100,332 +978,6 @@ const solvePuzzle = (puzzleId) => {
   }
 }
 
-// =====================
-// CUTSCENE SYSTEM
-// =====================
-
-// Check for scene-enter triggers
-const checkSceneEnterTriggers = () => {
-  const cutscene = currentScene.value.cutscenes?.find(c => c.trigger === 'scene-enter')
-  if (cutscene && !cutscene.hasPlayed) {
-    cutscene.hasPlayed = true
-    startCutscene(cutscene)
-  }
-}
-
-// Start a cutscene
-const startCutscene = (cutscene) => {
-  playModeState.value.currentCutscene = cutscene
-  playModeState.value.cutsceneActionIndex = 0
-  playModeState.value.isCutscenePlaying = true
-
-  executeCutsceneAction()
-}
-
-// Execute current cutscene action
-const executeCutsceneAction = () => {
-  const cutscene = playModeState.value.currentCutscene
-  if (!cutscene) return
-
-  const actionIndex = playModeState.value.cutsceneActionIndex
-  const action = cutscene.actions?.[actionIndex]
-
-  if (!action) {
-    // Cutscene finished
-    endCutscene()
-    return
-  }
-
-  // Execute action after delay
-  playModeState.value.cutsceneTimeout = setTimeout(() => {
-    performCutsceneAction(action)
-  }, action.delay || 0)
-}
-
-// Perform a single cutscene action
-const performCutsceneAction = (action) => {
-  switch (action.type) {
-    case 'dialog':
-      showPlayMessage(action.params?.text || '')
-      break
-
-    case 'move-actor':
-      if (action.params?.actorId === playModeState.value.playerActorId) {
-        walkToPoint(action.params.x, action.params.y)
-        playModeState.value.walkCallback = () => advanceCutscene()
-        return  // Don't advance yet, wait for walk
-      }
-      break
-
-    case 'actor-direction':
-      if (action.params?.actorId === playModeState.value.playerActorId) {
-        playModeState.value.playerDirection = action.params.direction
-      }
-      break
-
-    case 'play-sfx':
-      if (action.params?.sfxId) {
-        const sfx = currentScene.value.sfx?.find(s => s.id === action.params.sfxId)
-        if (sfx) playSFX(sfx)
-      }
-      break
-
-    case 'play-music':
-      if (action.params?.musicId) {
-        const music = currentScene.value.music?.find(m => m.id === action.params.musicId)
-        if (music) playMusic(music)
-      }
-      break
-
-    case 'stop-music':
-      stopMusic(action.params?.fadeOut || 0)
-      break
-
-    case 'wait':
-      playModeState.value.cutsceneTimeout = setTimeout(() => {
-        advanceCutscene()
-      }, action.params?.duration || 1000)
-      return  // Don't advance yet
-
-    case 'fade-in':
-      fadeIn(action.params?.duration || 1000)
-      playModeState.value.cutsceneTimeout = setTimeout(() => {
-        advanceCutscene()
-      }, action.params?.duration || 1000)
-      return
-
-    case 'fade-out':
-      fadeOut(action.params?.duration || 1000)
-      playModeState.value.cutsceneTimeout = setTimeout(() => {
-        advanceCutscene()
-      }, action.params?.duration || 1000)
-      return
-
-    case 'change-scene':
-      if (action.params?.sceneId) {
-        changeSceneWithTransition(action.params.sceneId)
-        return  // Scene change handles continuation
-      }
-      break
-
-    case 'set-variable':
-      if (action.params?.variable) {
-        playModeState.value.variables[action.params.variable] = action.params.value ?? true
-      }
-      break
-
-    case 'add-item':
-      if (action.params?.itemId) {
-        playAddToInventory(action.params.itemId)
-      }
-      break
-
-    case 'remove-item':
-      if (action.params?.itemId) {
-        playRemoveFromInventory(action.params.itemId)
-      }
-      break
-  }
-
-  // Advance after action duration
-  const duration = action.duration || 100
-  playModeState.value.cutsceneTimeout = setTimeout(() => {
-    advanceCutscene()
-  }, duration)
-}
-
-// Advance to next cutscene action
-const advanceCutscene = () => {
-  playModeState.value.cutsceneActionIndex++
-  executeCutsceneAction()
-}
-
-// End cutscene
-const endCutscene = () => {
-  playModeState.value.currentCutscene = null
-  playModeState.value.cutsceneActionIndex = 0
-  playModeState.value.isCutscenePlaying = false
-  playModeState.value.playerState = 'idle'
-}
-
-// Skip cutscene (if skippable)
-const skipCutscene = () => {
-  if (playModeState.value.currentCutscene?.skippable) {
-    if (playModeState.value.cutsceneTimeout) {
-      clearTimeout(playModeState.value.cutsceneTimeout)
-    }
-    endCutscene()
-  }
-}
-
-// =====================
-// TRANSITIONS
-// =====================
-
-// Fade out (to black)
-const fadeOut = (duration = 1000) => {
-  playModeState.value.isFading = true
-  const steps = 20
-  const stepDuration = duration / steps
-  let step = 0
-
-  const interval = setInterval(() => {
-    step++
-    playModeState.value.fadeOverlay = step / steps
-    if (step >= steps) {
-      clearInterval(interval)
-      playModeState.value.isFading = false
-    }
-  }, stepDuration)
-}
-
-// Fade in (from black)
-const fadeIn = (duration = 1000) => {
-  playModeState.value.isFading = true
-  playModeState.value.fadeOverlay = 1
-  const steps = 20
-  const stepDuration = duration / steps
-  let step = 0
-
-  const interval = setInterval(() => {
-    step++
-    playModeState.value.fadeOverlay = 1 - (step / steps)
-    if (step >= steps) {
-      clearInterval(interval)
-      playModeState.value.fadeOverlay = 0
-      playModeState.value.isFading = false
-    }
-  }, stepDuration)
-}
-
-// Change scene with fade transition
-const changeSceneWithTransition = (sceneId) => {
-  fadeOut(500)
-  setTimeout(() => {
-    switchScene(sceneId)
-    // Reinitialize player position for new scene
-    const firstPlacement = currentScene.value.actorPlacements[0]
-    if (firstPlacement) {
-      playModeState.value.playerPosition = {
-        x: firstPlacement.x + firstPlacement.w / 2,
-        y: firstPlacement.y + firstPlacement.h
-      }
-      playModeState.value.playerDirection = firstPlacement.direction || 'south'
-    }
-    playModeState.value.playerState = 'idle'
-    playModeState.value.isWalking = false
-
-    // Play new scene music
-    playSceneMusic()
-
-    // Check for scene-enter triggers
-    checkSceneEnterTriggers()
-
-    fadeIn(500)
-
-    // Continue cutscene if active
-    if (playModeState.value.isCutscenePlaying) {
-      setTimeout(() => advanceCutscene(), 600)
-    }
-  }, 500)
-}
-
-// =====================
-// VARIABLES
-// =====================
-
-// Set game variable
-const setVariable = (name, value) => {
-  playModeState.value.variables[name] = value
-}
-
-// Get game variable
-const getVariable = (name) => {
-  return playModeState.value.variables[name]
-}
-
-// Check variable condition
-const checkVariable = (name, expectedValue) => {
-  return playModeState.value.variables[name] === expectedValue
-}
-
-// Get player actor data
-const getPlayerActor = computed(() => {
-  if (!playModeState.value.playerActorId) return null
-  return project.value.globalData.actors.find(a => a.id === playModeState.value.playerActorId)
-})
-
-// Get player actor placement in current scene
-const getPlayerPlacement = computed(() => {
-  if (!playModeState.value.playerActorId) return null
-  return currentScene.value.actorPlacements.find(p => p.actorId === playModeState.value.playerActorId)
-})
-
-// Check if a point is inside any walkbox
-const isPointInWalkbox = (x, y) => {
-  for (const wb of currentScene.value.walkboxes) {
-    if (isPointInPolygon(x, y, wb.points)) {
-      return true
-    }
-  }
-  return false
-}
-
-// Point in polygon check (ray casting algorithm)
-const isPointInPolygon = (x, y, points) => {
-  let inside = false
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const xi = points[i].x, yi = points[i].y
-    const xj = points[j].x, yj = points[j].y
-    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
-      inside = !inside
-    }
-  }
-  return inside
-}
-
-// Find closest walkable point to target
-const findClosestWalkablePoint = (targetX, targetY) => {
-  if (isPointInWalkbox(targetX, targetY)) {
-    return { x: targetX, y: targetY }
-  }
-
-  // Find closest point on any walkbox edge
-  let closestPoint = null
-  let closestDist = Infinity
-
-  for (const wb of currentScene.value.walkboxes) {
-    for (let i = 0; i < wb.points.length; i++) {
-      const p1 = wb.points[i]
-      const p2 = wb.points[(i + 1) % wb.points.length]
-
-      const closest = closestPointOnSegment(targetX, targetY, p1.x, p1.y, p2.x, p2.y)
-      const dist = Math.hypot(closest.x - targetX, closest.y - targetY)
-
-      if (dist < closestDist) {
-        closestDist = dist
-        closestPoint = closest
-      }
-    }
-  }
-
-  return closestPoint || { x: targetX, y: targetY }
-}
-
-// Find closest point on line segment
-const closestPointOnSegment = (px, py, x1, y1, x2, y2) => {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len2 = dx * dx + dy * dy
-
-  if (len2 === 0) return { x: x1, y: y1 }
-
-  let t = ((px - x1) * dx + (py - y1) * dy) / len2
-  t = Math.max(0, Math.min(1, t))
-
-  return { x: x1 + t * dx, y: y1 + t * dy }
-}
-
 // Handle click in play mode
 const onPlayModeClick = (event) => {
   if (!playMode.value) return
@@ -1447,41 +999,6 @@ const onPlayModeClick = (event) => {
     // Walk to clicked point
     walkToPoint(coords.x, coords.y)
   }
-}
-
-// Find object at point (hotspot, image, exit, actor)
-const findObjectAtPoint = (x, y) => {
-  // Check exits
-  for (const exit of currentScene.value.exits) {
-    if (x >= exit.x && x <= exit.x + exit.w && y >= exit.y && y <= exit.y + exit.h) {
-      return { type: 'exit', element: exit }
-    }
-  }
-
-  // Check hotspots
-  for (const hotspot of currentScene.value.hotspots) {
-    if (x >= hotspot.x && x <= hotspot.x + hotspot.w && y >= hotspot.y && y <= hotspot.y + hotspot.h) {
-      return { type: 'hotspot', element: hotspot }
-    }
-  }
-
-  // Check interactive images
-  for (const img of currentScene.value.images) {
-    if (img.interactive && x >= img.x && x <= img.x + img.w && y >= img.y && y <= img.y + img.h) {
-      return { type: 'image', element: img }
-    }
-  }
-
-  // Check actor placements (not the player)
-  for (const placement of currentScene.value.actorPlacements) {
-    if (placement.actorId !== playModeState.value.playerActorId) {
-      if (x >= placement.x && x <= placement.x + placement.w && y >= placement.y && y <= placement.y + placement.h) {
-        return { type: 'actor', element: placement }
-      }
-    }
-  }
-
-  return null
 }
 
 // Handle interaction with an object
@@ -1659,79 +1176,6 @@ const handleObjectInteraction = (obj) => {
   }
 }
 
-// Walk player to a point
-const walkToPoint = (targetX, targetY) => {
-  const walkableTarget = findClosestWalkablePoint(targetX, targetY)
-
-  playModeState.value.walkTarget = walkableTarget
-  playModeState.value.isWalking = true
-
-  // Determine direction
-  const dx = walkableTarget.x - playModeState.value.playerPosition.x
-  const dy = walkableTarget.y - playModeState.value.playerPosition.y
-
-  if (Math.abs(dx) > Math.abs(dy)) {
-    playModeState.value.playerDirection = dx > 0 ? 'east' : 'west'
-  } else {
-    playModeState.value.playerDirection = dy > 0 ? 'south' : 'north'
-  }
-
-  playModeState.value.playerState = `walk-${playModeState.value.playerDirection}`
-}
-
-// Update walk animation (called from animation loop)
-const updateWalk = () => {
-  if (!playModeState.value.isWalking || !playModeState.value.walkTarget) return
-
-  const speed = 4  // pixels per frame
-  const target = playModeState.value.walkTarget
-  const pos = playModeState.value.playerPosition
-
-  const dx = target.x - pos.x
-  const dy = target.y - pos.y
-  const dist = Math.hypot(dx, dy)
-
-  if (dist < speed) {
-    // Arrived
-    playModeState.value.playerPosition = { ...target }
-    playModeState.value.isWalking = false
-    playModeState.value.playerState = 'idle'
-    playModeState.value.walkTarget = null
-
-    // Call walk callback if set (for cutscenes)
-    if (playModeState.value.walkCallback) {
-      const callback = playModeState.value.walkCallback
-      playModeState.value.walkCallback = null
-      callback()
-    }
-  } else {
-    // Move towards target
-    const moveX = (dx / dist) * speed
-    const moveY = (dy / dist) * speed
-    playModeState.value.playerPosition.x += moveX
-    playModeState.value.playerPosition.y += moveY
-
-    // Update direction
-    if (Math.abs(dx) > Math.abs(dy)) {
-      playModeState.value.playerDirection = dx > 0 ? 'east' : 'west'
-    } else {
-      playModeState.value.playerDirection = dy > 0 ? 'south' : 'north'
-    }
-    playModeState.value.playerState = `walk-${playModeState.value.playerDirection}`
-  }
-}
-
-// Show a message in play mode
-const showPlayMessage = (text) => {
-  playModeState.value.messageText = text
-  if (playModeState.value.messageTimeout) {
-    clearTimeout(playModeState.value.messageTimeout)
-  }
-  playModeState.value.messageTimeout = setTimeout(() => {
-    playModeState.value.messageText = ''
-  }, 3000)
-}
-
 // Execute an interaction action
 const executeInteractionAction = (interaction, obj) => {
   const params = interaction.params || {}
@@ -1843,39 +1287,6 @@ const executeInteractionAction = (interaction, obj) => {
   }
 }
 
-// Start a dialog
-const startDialog = (dialog) => {
-  playModeState.value.currentDialog = dialog
-  playModeState.value.dialogLineIndex = 0
-  playModeState.value.playerState = 'talk'
-}
-
-// Advance to next dialog line or close
-const advanceDialog = () => {
-  if (!playModeState.value.currentDialog) return
-
-  const dialog = playModeState.value.currentDialog
-  playModeState.value.dialogLineIndex++
-
-  if (playModeState.value.dialogLineIndex >= (dialog.lines?.length || 0)) {
-    // Dialog finished
-    playModeState.value.currentDialog = null
-    playModeState.value.dialogLineIndex = 0
-    playModeState.value.playerState = 'idle'
-  }
-}
-
-// Get current dialog line
-const getCurrentDialogLine = computed(() => {
-  if (!playModeState.value.currentDialog) return null
-  return playModeState.value.currentDialog.lines?.[playModeState.value.dialogLineIndex]
-})
-
-// Select verb
-const selectVerb = (verbId) => {
-  playModeState.value.selectedVerb = verbId
-}
-
 // Get current animation for player based on state
 const getPlayerCurrentAnimation = () => {
   const playerActor = getPlayerActor.value
@@ -1965,113 +1376,8 @@ watch(playMode, (isPlaying) => {
 // Actor preview frames (for canvas animation)
 const actorPreviewFrames = ref({}) // { actorId: frameIndex }
 
-// Light types
-const lightTypes = [
-  { id: 'point', name: 'Point Light', icon: '💡' },
-  { id: 'spot', name: 'Spotlight', icon: '🔦' },
-  { id: 'directional', name: 'Directional', icon: '☀️' },
-  { id: 'area', name: 'Area Light', icon: '⬜' }
-]
-
-// Particle presets
-const particlePresets = {
-  fire: {
-    name: 'Fire',
-    icon: '🔥',
-    emitRate: 30,
-    lifetime: { min: 0.5, max: 1.5 },
-    speed: { min: 50, max: 150 },
-    direction: { min: -30, max: 30 },
-    gravity: -50,
-    size: { start: 20, end: 5 },
-    color: { start: '#ff6600', end: '#ff000033' },
-    shape: 'circle'
-  },
-  smoke: {
-    name: 'Smoke',
-    icon: '💨',
-    emitRate: 15,
-    lifetime: { min: 2, max: 4 },
-    speed: { min: 20, max: 50 },
-    direction: { min: -20, max: 20 },
-    gravity: -30,
-    size: { start: 10, end: 40 },
-    color: { start: '#666666aa', end: '#99999900' },
-    shape: 'circle'
-  },
-  rain: {
-    name: 'Rain',
-    icon: '🌧️',
-    emitRate: 100,
-    lifetime: { min: 0.5, max: 1 },
-    speed: { min: 400, max: 600 },
-    direction: { min: 170, max: 180 },
-    gravity: 200,
-    size: { start: 2, end: 2 },
-    color: { start: '#88bbffaa', end: '#88bbff88' },
-    shape: 'line'
-  },
-  snow: {
-    name: 'Snow',
-    icon: '❄️',
-    emitRate: 40,
-    lifetime: { min: 3, max: 6 },
-    speed: { min: 20, max: 60 },
-    direction: { min: 160, max: 200 },
-    gravity: 20,
-    size: { start: 4, end: 4 },
-    color: { start: '#ffffffcc', end: '#ffffff66' },
-    shape: 'circle'
-  },
-  dust: {
-    name: 'Dust',
-    icon: '✨',
-    emitRate: 10,
-    lifetime: { min: 2, max: 5 },
-    speed: { min: 5, max: 20 },
-    direction: { min: 0, max: 360 },
-    gravity: 5,
-    size: { start: 3, end: 1 },
-    color: { start: '#d4a57466', end: '#d4a57400' },
-    shape: 'circle'
-  },
-  magic: {
-    name: 'Magic',
-    icon: '✨',
-    emitRate: 25,
-    lifetime: { min: 1, max: 2 },
-    speed: { min: 30, max: 80 },
-    direction: { min: 0, max: 360 },
-    gravity: -10,
-    size: { start: 8, end: 2 },
-    color: { start: '#ff88ffff', end: '#8888ff00' },
-    shape: 'star'
-  },
-  bubbles: {
-    name: 'Bubbles',
-    icon: '🫧',
-    emitRate: 8,
-    lifetime: { min: 2, max: 4 },
-    speed: { min: 30, max: 60 },
-    direction: { min: -30, max: 30 },
-    gravity: -40,
-    size: { start: 6, end: 12 },
-    color: { start: '#aaddff66', end: '#aaddff00' },
-    shape: 'circle'
-  },
-  sparks: {
-    name: 'Sparks',
-    icon: '⚡',
-    emitRate: 50,
-    lifetime: { min: 0.2, max: 0.5 },
-    speed: { min: 100, max: 300 },
-    direction: { min: 0, max: 360 },
-    gravity: 150,
-    size: { start: 3, end: 1 },
-    color: { start: '#ffff00ff', end: '#ff880000' },
-    shape: 'circle'
-  }
-}
+// Light types imported from useLighting composable
+// Particle presets imported from useParticleSystem composable
 
 // Particle system state for preview
 const activeParticles = ref({}) // { emitterId: [{ x, y, vx, vy, life, maxLife, size, color }] }
@@ -2672,187 +1978,28 @@ const handleImport = () => {
   input.click()
 }
 
+// COPY/PASTE SYSTEM provided by useElementCRUD composable
+// (clipboard, copyToClipboard, pasteFromClipboard)
+
+// Wrapper for delete that handles group cleanup
 const handleDeleteElement = () => {
   if (selectedElements.value.length === 0) return
 
-  // Map type to array name (scene-level elements)
-  const sceneTypeToArray = {
-    image: 'images',
-    walkbox: 'walkboxes',
-    exit: 'exits',
-    actorPlacement: 'actorPlacements',
-    actor: 'actorPlacements',
-    hotspot: 'hotspots',
-    zplane: 'zplanes',
-    dialog: 'dialogs',
-    puzzle: 'puzzles',
-    sfx: 'sfx',
-    music: 'music',
-    cutscene: 'cutscenes',
-    animation: 'animations',
-    particle: 'particles'
-  }
-
-  // Map type to array name (global elements)
-  const globalTypeToArray = {
-    verb: 'verbs',
-    item: 'items',
-    globalActor: 'actors'
-  }
-
-  // Delete all selected elements
-  selectedElements.value.forEach(({ type, element }) => {
-    // Remove from any group this element belongs to
+  // Remove from groups before deletion
+  const removeFromGroups = (type, id) => {
     if (currentScene.value.groups) {
       currentScene.value.groups.forEach(group => {
-        group.members = group.members.filter(m => !(m.type === type && m.id === element.id))
+        group.members = group.members.filter(m => !(m.type === type && m.id === id))
       })
       // Remove empty groups
       currentScene.value.groups = currentScene.value.groups.filter(g => g.members.length > 0)
     }
-
-    // Check if it's a global element
-    if (globalTypeToArray[type]) {
-      const arrayName = globalTypeToArray[type]
-      const array = project.value.globalData[arrayName]
-      if (array) {
-        const idx = array.findIndex(e => e.id === element.id)
-        if (idx > -1) array.splice(idx, 1)
-      }
-      return
-    }
-
-    // Special handling for lights (nested in lighting.lights)
-    if (type === 'light') {
-      if (currentScene.value.lighting?.lights) {
-        const idx = currentScene.value.lighting.lights.findIndex(e => e.id === element.id)
-        if (idx > -1) currentScene.value.lighting.lights.splice(idx, 1)
-      }
-      return
-    }
-
-    // Scene-level element
-    const arrayName = sceneTypeToArray[type]
-    if (arrayName && currentScene.value[arrayName]) {
-      currentScene.value[arrayName] = currentScene.value[arrayName].filter(e => e.id !== element.id)
-    }
-  })
-
-  selectedElements.value = []
-}
-
-// =====================
-// COPY/PASTE SYSTEM
-// =====================
-
-const clipboard = ref([])
-
-// Generate unique name with sub-index
-const generateUniqueName = (baseName, type, arrayName) => {
-  const existingNames = currentScene.value[arrayName].map(el => el.name)
-
-  // Check if baseName already has a sub-index pattern (name-N)
-  const baseMatch = baseName.match(/^(.+)-(\d+)$/)
-  let coreName = baseMatch ? baseMatch[1] : baseName
-
-  // Find all existing names that match the pattern
-  let maxIndex = 1
-  const pattern = new RegExp(`^${coreName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:-(\\d+))?$`)
-
-  existingNames.forEach(name => {
-    const match = name.match(pattern)
-    if (match) {
-      const index = match[1] ? parseInt(match[1], 10) : 1
-      if (index >= maxIndex) {
-        maxIndex = index + 1
-      }
-    }
-  })
-
-  // If the exact name doesn't exist and it's the first copy, just use coreName-2
-  if (!existingNames.includes(baseName)) {
-    return baseName
   }
 
-  return `${coreName}-${maxIndex}`
-}
-
-// Copy selected elements to clipboard
-const handleCopy = () => {
-  if (selectedElements.value.length === 0) return
-
-  // Deep clone selected elements
-  clipboard.value = selectedElements.value.map(({ type, element }) => ({
-    type,
-    element: JSON.parse(JSON.stringify(element))
-  }))
-}
-
-// Paste elements from clipboard
-const handlePaste = () => {
-  if (clipboard.value.length === 0) return
-
-  // Scene-level elements
-  const sceneTypeToArray = {
-    image: 'images',
-    walkbox: 'walkboxes',
-    exit: 'exits',
-    actorPlacement: 'actorPlacements',
-    hotspot: 'hotspots',
-    zplane: 'zplanes',
-    dialog: 'dialogs',
-    puzzle: 'puzzles',
-    sfx: 'sfx',
-    music: 'music',
-    cutscene: 'cutscenes',
-    animation: 'animations'
-  }
-
-  // Global elements
-  const globalTypeToArray = {
-    verb: 'verbs',
-    item: 'items',
-    globalActor: 'actors'
-  }
-
-  const pastedElements = []
-  const PASTE_OFFSET = 20 // Offset for pasted elements
-
-  clipboard.value.forEach(({ type, element }) => {
-    // Determine if this is a scene or global element
-    const isGlobal = !!globalTypeToArray[type]
-    const arrayName = isGlobal ? globalTypeToArray[type] : sceneTypeToArray[type]
-    const targetArray = isGlobal ? project.value.globalData[arrayName] : currentScene.value[arrayName]
-    if (!arrayName || !targetArray) return
-
-    // Create new element with unique ID
-    const newElement = JSON.parse(JSON.stringify(element))
-    newElement.id = Date.now() + Math.random() * 1000 // Ensure unique ID
-
-    // Generate unique name
-    newElement.name = generateUniqueName(element.name, type, arrayName)
-
-    // Offset position for spatial elements
-    if (newElement.x !== undefined && newElement.y !== undefined) {
-      newElement.x = Math.min(newElement.x + PASTE_OFFSET, currentScene.value.width - (newElement.w || 0))
-      newElement.y = Math.min(newElement.y + PASTE_OFFSET, currentScene.value.height - (newElement.h || 0))
-    }
-
-    // Handle walkbox points offset
-    if (type === 'walkbox' && newElement.points) {
-      newElement.points = newElement.points.map(p => ({
-        x: Math.min(p.x + PASTE_OFFSET, currentScene.value.width),
-        y: Math.min(p.y + PASTE_OFFSET, currentScene.value.height)
-      }))
-    }
-
-    // Add to appropriate array (scene or global)
-    targetArray.push(newElement)
-    pastedElements.push({ type, element: newElement })
+  // Use composable's deleteSelectedElements with group removal callback
+  deleteSelectedElements({
+    removeFromGroup: removeFromGroups
   })
-
-  // Select pasted elements
-  selectedElements.value = pastedElements
 }
 
 // Register keyboard shortcuts using the composable
@@ -2862,12 +2009,12 @@ registerShortcuts(createEditorShortcuts({
   redo,
   copy: () => {
     if (selectedElements.value.length > 0) {
-      handleCopy()
+      copyToClipboard()
     }
   },
   paste: () => {
-    if (clipboard.value.length > 0) {
-      handlePaste()
+    if (hasClipboard.value) {
+      pasteFromClipboard()
     }
   },
   delete: handleDeleteElement,
@@ -4271,11 +3418,6 @@ const deleteAsset = async (assetId) => {
 const showAudioManagerModal = ref(false)
 const audioUploadDragging = ref(false)
 const currentlyPlayingAudio = ref(null)  // { id, audioElement }
-
-// Get audio asset by ID
-const getAudioAssetById = (audioId) => {
-  return project.value.globalData.audioAssets.find(a => a.id === audioId)
-}
 
 // Upload audio from file
 const handleAudioUpload = (file) => {
@@ -6694,12 +5836,12 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Zoom controls -->
+        <!-- Zoom controls (from useCanvasZoom composable) -->
         <div class="zoom-controls">
-          <button class="zoom-btn" @click="zoom = Math.max(0.1, zoom - 0.1)">-</button>
-          <span class="zoom-level pixel-font-sm">{{ Math.round(zoom * 100) }}%</span>
-          <button class="zoom-btn" @click="zoom = Math.min(2, zoom + 0.1)">+</button>
-          <button class="zoom-btn fit-btn" @click="zoom = 0.5">FIT</button>
+          <button class="zoom-btn" @click="zoomOut" :disabled="!canZoomOut">-</button>
+          <span class="zoom-level pixel-font-sm">{{ zoomPercent }}%</span>
+          <button class="zoom-btn" @click="zoomIn" :disabled="!canZoomIn">+</button>
+          <button class="zoom-btn fit-btn" @click="setZoom(0.5)">FIT</button>
           <button
             class="zoom-btn grid-btn"
             :class="{ active: showGrid }"

@@ -33,3 +33,12 @@ export {
   DEFAULT_HEIGHT,
   DEFAULT_VERBS
 } from './useSceneEditor'
+
+// Visual effects composables
+export { useParticleSystem, particlePresets, parseColor } from './useParticleSystem'
+export { useLighting, lightTypes } from './useLighting'
+export { useAudioPlayback } from './useAudioPlayback'
+
+// Play mode composables
+export { usePlayMode } from './usePlayMode'
+export { useCutsceneEngine } from './useCutsceneEngine'
