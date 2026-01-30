@@ -25,7 +25,11 @@ import {
   EditorStatusBar,
   PlayModeOverlay,
   SceneActionsBar,
-  ZoomControls
+  ZoomControls,
+  LeftPanel,
+  PropertiesPanel,
+  SceneTabs,
+  ElementList
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -5739,19 +5743,16 @@ onUnmounted(() => {
       </div>
       <div class="header-center">
         <!-- Scene Tabs -->
-        <div class="scene-tabs">
-          <button
-            v-for="scene in availableScenes"
-            :key="scene.id"
-            class="scene-tab"
-            :class="{ active: scene.id === project.currentSceneId }"
-            @click="switchScene(scene.id)"
-            @dblclick="openRenameSceneModal"
-          >
-            {{ scene.name }}
-          </button>
-          <button class="scene-tab add-scene-tab" @click="createNewScene" title="New Scene">+</button>
-        </div>
+        <SceneTabs
+          :scenes="availableScenes"
+          :current-scene-id="project.currentSceneId"
+          :can-delete="project.scenes.length > 1"
+          @switch="switchScene"
+          @new="createNewScene"
+          @rename="openRenameSceneModal"
+          @duplicate="duplicateCurrentScene"
+          @delete="deleteCurrentScene"
+        />
       </div>
       <div class="header-right">
         <button class="header-btn undo-btn" @click="undo" :disabled="!canUndo" title="Undo (Ctrl+Z)">↩</button>
@@ -5770,16 +5771,6 @@ onUnmounted(() => {
         <button class="header-btn play-btn" @click="enterPlayMode" title="Play Mode (Test Game)">▶️ PLAY</button>
       </div>
     </header>
-
-    <!-- Scene Actions Bar -->
-    <div class="scene-actions-bar">
-      <span class="scene-name-label">Scene: <strong>{{ currentScene.name }}</strong></span>
-      <div class="scene-actions">
-        <button class="scene-action-btn" @click="openRenameSceneModal" title="Rename Scene">✏️</button>
-        <button class="scene-action-btn" @click="duplicateCurrentScene" title="Duplicate Scene">📋</button>
-        <button class="scene-action-btn danger" @click="deleteCurrentScene" :disabled="project.scenes.length <= 1" title="Delete Scene">🗑️</button>
-      </div>
-    </div>
 
     <!-- Main editor area -->
     <div class="editor-main">
@@ -12432,54 +12423,6 @@ Elementos:
 .add-scene-tab:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-/* Scene Actions Bar */
-.scene-actions-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 12px;
-  background: var(--bg-medium);
-  border-bottom: 2px solid var(--bg-dark);
-}
-
-.scene-name-label {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 8px;
-  color: var(--text-secondary);
-}
-
-.scene-name-label strong {
-  color: var(--primary);
-}
-
-.scene-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.scene-action-btn {
-  background: transparent;
-  border: 1px solid var(--bg-light);
-  padding: 2px 6px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all var(--transition-fast);
-}
-
-.scene-action-btn:hover {
-  background: var(--bg-light);
-}
-
-.scene-action-btn.danger:hover {
-  background: var(--error);
-  border-color: var(--error);
-}
-
-.scene-action-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
 }
 
 /* Global Data Separator */

@@ -222,25 +222,30 @@ const getElements = (arrayKey) => {
         @select="(element, event) => $emit('select-element', section.type, element, event)"
       />
 
-      <!-- Global Animations Section -->
-      <ElementList
-        type="animation"
-        title="Animations"
-        icon="&#127902;"
-        icon-class="text-animation"
-        :elements="globalAnimations"
-        :selected-ids="getSelectedIds('animation')"
-        :collapsed="collapsedSections.animations ?? true"
-        :visible="true"
-        :show-visibility="false"
-        :show-select-all="false"
-        empty-text="No animations"
-        badge-key="frames"
-        badge-icon="f"
-        @toggle-collapse="$emit('toggle-section', 'animations')"
-        @add="$emit('add-element', 'animation')"
-        @select="(element, event) => $emit('select-element', 'animation', element, event)"
-      />
+      <!-- Global Animations Section (with slot for custom content) -->
+      <slot name="animations">
+        <ElementList
+          type="animation"
+          title="Animations"
+          icon="&#127902;"
+          icon-class="text-animation"
+          :elements="globalAnimations"
+          :selected-ids="getSelectedIds('animation')"
+          :collapsed="collapsedSections.animations ?? true"
+          :visible="true"
+          :show-visibility="false"
+          :show-select-all="false"
+          empty-text="No animations"
+          badge-key="frames"
+          badge-icon="f"
+          @toggle-collapse="$emit('toggle-section', 'animations')"
+          @add="$emit('add-element', 'animation')"
+          @select="(element, event) => $emit('select-element', 'animation', element, event)"
+        />
+      </slot>
+
+      <!-- Slot for additional global sections -->
+      <slot name="global-sections"></slot>
     </div>
   </aside>
 </template>
