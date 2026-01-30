@@ -50,3 +50,7 @@ export { useSceneManagement } from './useSceneManagement'
 export { useGlobalActors, DEFAULT_ACTOR_ANIMATIONS } from './useGlobalActors'
 export { usePuzzleHelpers } from './usePuzzleHelpers'
 export { useInteractionSystem, INTERACTION_ACTIONS, CONDITION_OPERATORS } from './useInteractionSystem'
+
+// Asset and Animation composables
+export { useAnimations, ACTOR_ANIMATION_STATES } from './useAnimations'
+export { useAssetManager } from './useAssetManager'

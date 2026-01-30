@@ -63,12 +63,15 @@ src/composables/
 │   ├── usePuzzleHelpers.js      # [✅] Helpers para edición de puzzles (~175 líneas)
 │   └── useInteractionSystem.js  # [✅] Sistema de interacciones verbo-objeto (~225 líneas)
 │
-└── Pendientes (2)
-    ├── useAnimations.js         # [ ] Spritesheet editor, preview (código en EditorView)
-    └── useAssetManager.js       # [ ] Lógica del modal de assets (código en EditorView)
+├── Asset/Animation (2)
+│   ├── useAnimations.js         # [✅] Gestión de animaciones y preview (~350 líneas)
+│   └── useAssetManager.js       # [✅] Gestión de assets y carpetas (~380 líneas)
+│
+└── Pendientes (0)
+    (Todos los composables principales extraídos)
 ```
 
-**Total: 21 composables creados, 2 pendientes**
+**Total: 23 composables creados**
 
 ### 1.2 Componentes a Crear
 
@@ -83,9 +86,17 @@ src/components/
 │   ├── LeftPanel.vue            # [✅] Panel izquierdo contenedor
 │   ├── ElementList.vue          # [✅] Lista de elementos por tipo
 │   ├── ElementSection.vue       # [✅] Sección genérica de elementos (reemplaza 11 secciones)
+│   ├── ActorPlacementsSection.vue # [✅] Sección de actores en escena
+│   ├── AnimationsSection.vue    # [✅] Sección de animaciones globales
+│   ├── LightsSection.vue        # [✅] Sección de luces con ambient
+│   ├── AssetsSection.vue        # [✅] Sección de assets con thumbnails
 │   ├── SceneTabs.vue            # [✅] Tabs de escenas
 │   ├── PropertiesPanel.vue      # [✅] Panel derecho contenedor
 │   └── PropertyEditor.vue       # [ ] Editor genérico de propiedades
+│
+├── properties/
+│   ├── PropertyField.vue        # [✅] Campo de propiedad genérico
+│   └── PropertyGroup.vue        # [✅] Grupo de propiedades colapsable
 │
 ├── canvas/
 │   ├── EditorCanvas.vue         # [✅] Canvas principal con elementos

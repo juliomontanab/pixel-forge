@@ -47,7 +47,11 @@ import {
   PropertiesPanel,
   SceneTabs,
   ElementList,
-  ElementSection
+  ElementSection,
+  ActorPlacementsSection,
+  AnimationsSection,
+  LightsSection,
+  AssetsSection
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -3875,36 +3879,19 @@ onUnmounted(() => {
             @select-all="selectAllOfType"
           />
 
-          <!-- Actor Placements Section (Scene-specific) -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.actorPlacements }">
-            <div class="section-header" @click="toggleSection('actorPlacements')">
-              <span class="collapse-icon">{{ collapsedSections.actorPlacements ? '▶' : '▼' }}</span>
-              <span class="section-icon text-actor">👤</span>
-              <span class="section-name">Actors in Scene</span>
-              <span class="section-count">{{ elementCounts.actorPlacements }}</span>
-              <button
-                class="visibility-btn"
-                :class="{ hidden: !visibleTypes.actors }"
-                @click.stop="toggleVisibility('actors')"
-                title="Toggle visibility"
-              >{{ visibleTypes.actors ? '👁' : '👁' }}</button>
-              <button class="add-btn" @click.stop="showPlaceActorModal = true" title="Place actor in scene">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.actorPlacements">
-              <div
-                v-for="placement in currentScene.actorPlacements"
-                :key="placement.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'actorPlacement' && s.element.id === placement.id) }"
-                @click="handleSelectElement('actorPlacement', placement)"
-              >
-                <span class="item-icon text-actor">👤</span>
-                <span class="item-name">{{ getGlobalActorById(placement.actorId)?.name || 'Unknown' }}</span>
-                <button class="remove-item-btn" @click.stop="removeActorFromScene(placement.id)" title="Remove from scene">×</button>
-              </div>
-              <p v-if="currentScene.actorPlacements.length === 0" class="empty-section">No actors placed</p>
-            </div>
-          </div>
+          <!-- Actor Placements Section -->
+          <ActorPlacementsSection
+            :placements="currentScene.actorPlacements"
+            :collapsed="collapsedSections.actorPlacements"
+            :visible="visibleTypes.actors"
+            :selected-elements="selectedElements"
+            :get-actor-name="(actorId) => getGlobalActorById(actorId)?.name || 'Unknown'"
+            @toggle-collapse="toggleSection('actorPlacements')"
+            @toggle-visibility="toggleVisibility"
+            @add="showPlaceActorModal = true"
+            @select="handleSelectElement"
+            @remove="removeActorFromScene"
+          />
 
           <!-- Hotspots Section -->
           <ElementSection
@@ -4038,95 +4025,31 @@ onUnmounted(() => {
             </template>
           </ElementSection>
 
-          <!-- Animations Section (Global) -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.animations }">
-            <div class="section-header" @click="toggleSection('animations')">
-              <span class="collapse-icon">{{ collapsedSections.animations ? '▶' : '▼' }}</span>
-              <span class="section-icon text-animation">🎞</span>
-              <span class="section-name">Animations</span>
-              <span class="section-count">{{ globalAnimations.length }}</span>
-              <button class="add-btn" @click.stop="openSpritesheetEditor()" title="Open Spritesheet Editor">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.animations">
-              <div
-                v-for="anim in globalAnimations"
-                :key="anim.id"
-                class="element-item animation-item-extended"
-                :class="{ selected: selectedElements.some(s => s.type === 'animation' && s.element.id === anim.id) }"
-                @click="handleSelectElement('animation', anim)"
-              >
-                <div class="animation-item-main">
-                  <span class="item-icon text-animation">🎞</span>
-                  <span class="item-name">{{ anim.name }}</span>
-                  <span class="item-badge">{{ anim.frames?.length || 0 }}f</span>
-                </div>
-                <div class="animation-item-usage" v-if="getAnimationUsage(anim.id).length > 0">
-                  <span
-                    v-for="usage in getAnimationUsage(anim.id)"
-                    :key="`${usage.actorId}-${usage.state}`"
-                    class="usage-tag"
-                    :title="`${usage.actorName} - ${usage.stateLabel}`"
-                  >
-                    {{ usage.stateIcon }} {{ usage.actorName }}
-                  </span>
-                </div>
-                <div class="animation-item-usage unassigned" v-else>
-                  <span class="usage-tag unused">Sin asignar</span>
-                </div>
-              </div>
-              <p v-if="globalAnimations.length === 0" class="empty-section">No animations</p>
-            </div>
-          </div>
+          <!-- Animations Section -->
+          <AnimationsSection
+            :animations="globalAnimations"
+            :collapsed="collapsedSections.animations"
+            :selected-elements="selectedElements"
+            :get-animation-usage="getAnimationUsage"
+            @toggle-collapse="toggleSection('animations')"
+            @add="openSpritesheetEditor()"
+            @select="handleSelectElement"
+          />
 
           <!-- Lights Section -->
-          <div class="element-section" :class="{ collapsed: collapsedSections.lights }">
-            <div class="section-header" @click="toggleSection('lights')">
-              <span class="collapse-icon">{{ collapsedSections.lights ? '▶' : '▼' }}</span>
-              <button
-                class="visibility-toggle"
-                :class="{ hidden: !visibleTypes.lights }"
-                @click.stop="toggleVisibility('lights')"
-                title="Toggle visibility"
-              >{{ visibleTypes.lights ? '👁' : '👁' }}</button>
-              <span class="section-icon text-light">💡</span>
-              <span class="section-name">Lights</span>
-              <span class="section-count">{{ elementCounts.lights }}</span>
-              <button class="add-btn" @click.stop="handleAddElement('light')">+</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.lights">
-              <!-- Ambient light settings -->
-              <div class="ambient-light-settings" v-if="currentScene.lighting && currentScene.lighting.ambient">
-                <label>Ambient:</label>
-                <input
-                  type="color"
-                  v-model="currentScene.lighting.ambient.color"
-                  class="ambient-color"
-                />
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  v-model.number="currentScene.lighting.ambient.intensity"
-                  class="ambient-intensity"
-                />
-                <span class="intensity-value">{{ currentScene.lighting.ambient.intensity.toFixed(1) }}</span>
-              </div>
-              <div
-                v-for="light in currentScene.lighting.lights"
-                :key="light.id"
-                class="element-item"
-                :class="{ selected: selectedElements.some(s => s.type === 'light' && s.element.id === light.id) }"
-                @click="handleSelectElement('light', light)"
-              >
-                <span class="item-icon text-light">{{ getLightIcon(light.type) }}</span>
-                <span class="item-id">#{{ light.id }}</span>
-                <span class="item-name">{{ light.name }}</span>
-                <span class="light-color-preview" :style="{ backgroundColor: light.color }"></span>
-              </div>
-              <p v-if="currentScene.lighting.lights.length === 0" class="empty-section">No lights</p>
-            </div>
-          </div>
+          <LightsSection
+            :lighting="currentScene.lighting"
+            :collapsed="collapsedSections.lights"
+            :visible="visibleTypes.lights"
+            :selected-elements="selectedElements"
+            :get-light-icon="getLightIcon"
+            @toggle-collapse="toggleSection('lights')"
+            @toggle-visibility="toggleVisibility"
+            @add="handleAddElement"
+            @select="handleSelectElement"
+            @update:ambient-color="(color) => currentScene.lighting.ambient.color = color"
+            @update:ambient-intensity="(intensity) => currentScene.lighting.ambient.intensity = intensity"
+          />
 
           <!-- Particles Section -->
           <ElementSection
@@ -4156,34 +4079,14 @@ onUnmounted(() => {
             <span class="separator-label">🌍 GLOBAL DATA</span>
           </div>
 
-          <!-- Assets Section (Global) -->
-          <div class="element-section global-section" :class="{ collapsed: collapsedSections.assets }">
-            <div class="section-header" @click="toggleSection('assets')">
-              <span class="collapse-icon">{{ collapsedSections.assets ? '▶' : '▼' }}</span>
-              <span class="section-icon text-asset">🖼️</span>
-              <span class="section-name">Assets</span>
-              <span class="section-count">{{ elementCounts.assets }}</span>
-              <button class="add-btn" @click.stop="showAssetManagerModal = true" title="Open Asset Manager">📁</button>
-            </div>
-            <div class="section-list" v-show="!collapsedSections.assets">
-              <div
-                v-for="asset in project.globalData.assets"
-                :key="asset.id"
-                class="element-item asset-item"
-              >
-                <div
-                  class="asset-thumbnail"
-                  :style="{ backgroundImage: getAssetDisplayUrl(asset) ? `url(${getAssetDisplayUrl(asset)})` : 'none' }"
-                >
-                  <span v-if="asset.s3Key" class="s3-indicator">☁️</span>
-                </div>
-                <span class="item-name">{{ asset.name }}</span>
-                <span class="asset-dims">{{ asset.width }}×{{ asset.height }}</span>
-              </div>
-              <p v-if="project.globalData.assets.length === 0" class="empty-section">No assets</p>
-              <button class="manage-assets-btn" @click="showAssetManagerModal = true">Manage Assets</button>
-            </div>
-          </div>
+          <!-- Assets Section -->
+          <AssetsSection
+            :assets="project.globalData.assets"
+            :collapsed="collapsedSections.assets"
+            :get-asset-display-url="getAssetDisplayUrl"
+            @toggle-collapse="toggleSection('assets')"
+            @open-manager="showAssetManagerModal = true"
+          />
 
           <!-- Audio Assets Section (Global) -->
           <div class="element-section global-section" :class="{ collapsed: collapsedSections.audioAssets }">

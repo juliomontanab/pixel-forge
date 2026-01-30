@@ -160,8 +160,8 @@ const componentMap = {
 
 ### Sprint 1: Componentes Genéricos
 1. [x] Crear `ElementSection.vue` (✅ Completado 2026-01-30)
-2. [x] Reemplazar secciones del panel izquierdo (✅ 11 de 15 - ver notas)
-3. [ ] Crear `PropertyField.vue` y `PropertyGroup.vue`
+2. [x] Reemplazar secciones del panel izquierdo (✅ 15 de 15 completas)
+3. [x] Crear `PropertyField.vue` y `PropertyGroup.vue` (✅ Completado 2026-01-30)
 4. [x] Verificar build (✅ OK)
 
 **Secciones reemplazadas con ElementSection:**
@@ -177,11 +177,11 @@ const componentMap = {
 - [x] Cutscenes (con slot para actions count)
 - [x] Particles (con getItemIcon y slot para preset badge)
 
-**Secciones que requieren componentes especializados:**
-- [ ] Actor Placements (modal add, remove button por item)
-- [ ] Animations (estructura multi-fila compleja)
-- [ ] Lights (tiene ambient settings inline)
-- [ ] Assets (tiene thumbnails, estructura custom)
+**Secciones especializadas creadas:**
+- [x] ActorPlacementsSection.vue (modal add, remove button por item) ✅
+- [x] AnimationsSection.vue (estructura multi-fila compleja) ✅
+- [x] LightsSection.vue (tiene ambient settings inline) ✅
+- [x] AssetsSection.vue (tiene thumbnails, estructura custom) ✅
 
 ### Sprint 2: Properties Simples
 1. [ ] Crear `CommonProperties.vue` (ID, Name, Position, Size, Rotation)
@@ -224,7 +224,16 @@ const componentMap = {
 ### Progreso Actual (2026-01-30)
 - **Inicio**: 12,516 líneas
 - **Después de 11 ElementSection**: 12,333 líneas
-- **Ahorro hasta ahora**: 183 líneas (~17 líneas por sección)
+- **Después de 4 secciones especializadas**: 12,236 líneas
+- **Ahorro total template**: 280 líneas
+
+**Composables creados:**
+- useAnimations.js (~350 líneas)
+- useAssetManager.js (~380 líneas)
+
+**Componentes creados:**
+- PropertyField.vue (campo genérico)
+- PropertyGroup.vue (grupo colapsable)
 
 ### Resultado Esperado
 - **EditorView.vue**: ~12,500 → ~9,900 líneas (solo template)

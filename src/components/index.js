@@ -34,6 +34,14 @@ export { default as PropertiesPanel } from './panels/PropertiesPanel.vue'
 export { default as SceneTabs } from './panels/SceneTabs.vue'
 export { default as ElementList } from './panels/ElementList.vue'
 export { default as ElementSection } from './panels/ElementSection.vue'
+export { default as ActorPlacementsSection } from './panels/ActorPlacementsSection.vue'
+export { default as AnimationsSection } from './panels/AnimationsSection.vue'
+export { default as LightsSection } from './panels/LightsSection.vue'
+export { default as AssetsSection } from './panels/AssetsSection.vue'
+
+// Property Components
+export { default as PropertyField } from './properties/PropertyField.vue'
+export { default as PropertyGroup } from './properties/PropertyGroup.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
