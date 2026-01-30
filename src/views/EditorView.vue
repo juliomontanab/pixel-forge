@@ -1291,6 +1291,49 @@ const elementCounts = computed(() => ({
   globalActors: project.value.globalData.actors.length
 }))
 
+// Element sections configuration for data-driven rendering (grouped by position in panel)
+// Group 1: Spatial elements before ActorPlacements
+const SPATIAL_SECTIONS_1 = [
+  { type: 'image', typePlural: 'images', icon: '🖼', label: 'Images', colorClass: 'text-image', showVisibility: true, badgeField: 'interactive', badgeIcon: '⚡' },
+  { type: 'walkbox', typePlural: 'walkboxes', icon: '▢', label: 'Walkboxes', colorClass: 'text-walkbox', showVisibility: true, getItemName: (item) => `Walkbox ${item.id}` },
+  { type: 'exit', typePlural: 'exits', icon: '→', label: 'Exits', colorClass: 'text-exit', showVisibility: true }
+]
+// Group 2: Spatial elements after ActorPlacements
+const SPATIAL_SECTIONS_2 = [
+  { type: 'hotspot', typePlural: 'hotspots', icon: '◎', label: 'Hotspots', colorClass: 'text-hotspot', showVisibility: true },
+  { type: 'zplane', typePlural: 'zplanes', icon: '▤', label: 'Z-Planes', colorClass: 'text-zplane', showVisibility: true }
+]
+// Group 3: Data elements (no visibility toggle)
+const DATA_SECTIONS = [
+  { type: 'dialog', typePlural: 'dialogs', icon: '💬', label: 'Dialogs', colorClass: 'text-dialog', showVisibility: false },
+  { type: 'puzzle', typePlural: 'puzzles', icon: '🧩', label: 'Puzzles', colorClass: 'text-puzzle', showVisibility: false },
+  { type: 'sfx', typePlural: 'sfx', icon: '🔊', label: 'SFX', colorClass: 'text-sfx', showVisibility: false },
+  { type: 'music', typePlural: 'music', icon: '🎵', label: 'Music', colorClass: 'text-music', showVisibility: false },
+  { type: 'cutscene', typePlural: 'cutscenes', icon: '🎬', label: 'Cutscenes', colorClass: 'text-cutscene', showVisibility: false, badgeField: 'actions', badgeCount: true }
+]
+// Group 4: Particle section (after Lights)
+const PARTICLE_SECTION = { type: 'particle', typePlural: 'particles', icon: '✨', label: 'Particles', colorClass: 'text-particle', showVisibility: true, showSelectAll: false, badgeField: 'preset' }
+
+// Get items array for element type
+const getElementItems = (typePlural) => {
+  return currentScene.value[typePlural] || []
+}
+
+// Get item badge for element
+const getElementBadge = (config, item) => {
+  if (!config.badgeField) return null
+  if (config.badgeCount && item[config.badgeField]?.length > 0) {
+    return item[config.badgeField].length
+  }
+  if (config.badgeIcon && item[config.badgeField]) {
+    return config.badgeIcon
+  }
+  if (item[config.badgeField]) {
+    return item[config.badgeField]
+  }
+  return null
+}
+
 // COPY/PASTE SYSTEM provided by useElementCRUD composable
 // (clipboard, copyToClipboard, pasteFromClipboard)
 
@@ -1594,66 +1637,34 @@ onUnmounted(() => {
         </div>
 
         <div class="panel-content pixel-scrollbar">
-          <!-- Images Section -->
-          <ElementSection
-            type="image"
-            type-plural="images"
-            icon="🖼"
-            label="Images"
-            :items="currentScene.images"
-            :collapsed="collapsedSections.images"
-            :visible="visibleTypes.images"
-            :selected-elements="selectedElements"
-            color-class="text-image"
-            @toggle-collapse="toggleSection('images')"
-            @toggle-visibility="toggleVisibility"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          >
-            <template #item-badges="{ item }">
-              <span v-if="item.interactive" class="item-badge interactive">⚡</span>
-            </template>
-          </ElementSection>
+          <!-- Spatial Sections Group 1: Images, Walkboxes, Exits -->
+          <template v-for="config in SPATIAL_SECTIONS_1" :key="config.type">
+            <ElementSection
+              :type="config.type"
+              :type-plural="config.typePlural"
+              :icon="config.icon"
+              :label="config.label"
+              :items="getElementItems(config.typePlural)"
+              :collapsed="collapsedSections[config.typePlural]"
+              :visible="visibleTypes[config.typePlural]"
+              :selected-elements="selectedElements"
+              :color-class="config.colorClass"
+              :get-item-name="config.getItemName || null"
+              @toggle-collapse="toggleSection(config.typePlural)"
+              @toggle-visibility="toggleVisibility"
+              @add="handleAddElement"
+              @select="handleSelectElement"
+              @select-all="selectAllOfType"
+            >
+              <template #item-badges="{ item }">
+                <span v-if="getElementBadge(config, item)" class="item-badge" :class="{ interactive: config.badgeIcon === '⚡' }">
+                  {{ getElementBadge(config, item) }}
+                </span>
+              </template>
+            </ElementSection>
+          </template>
 
-          <!-- Walkboxes Section -->
-          <ElementSection
-            type="walkbox"
-            type-plural="walkboxes"
-            icon="▢"
-            label="Walkboxes"
-            :items="currentScene.walkboxes"
-            :collapsed="collapsedSections.walkboxes"
-            :visible="visibleTypes.walkboxes"
-            :selected-elements="selectedElements"
-            color-class="text-walkbox"
-            :get-item-name="(item) => `Walkbox ${item.id}`"
-            @toggle-collapse="toggleSection('walkboxes')"
-            @toggle-visibility="toggleVisibility"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Exits Section -->
-          <ElementSection
-            type="exit"
-            type-plural="exits"
-            icon="→"
-            label="Exits"
-            :items="currentScene.exits"
-            :collapsed="collapsedSections.exits"
-            :visible="visibleTypes.exits"
-            :selected-elements="selectedElements"
-            color-class="text-exit"
-            @toggle-collapse="toggleSection('exits')"
-            @toggle-visibility="toggleVisibility"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Actor Placements Section -->
+          <!-- Actor Placements Section (special) -->
           <ActorPlacementsSection
             :placements="currentScene.actorPlacements"
             :collapsed="collapsedSections.actorPlacements"
@@ -1667,139 +1678,57 @@ onUnmounted(() => {
             @remove="removeActorFromScene"
           />
 
-          <!-- Hotspots Section -->
-          <ElementSection
-            type="hotspot"
-            type-plural="hotspots"
-            icon="◎"
-            label="Hotspots"
-            :items="currentScene.hotspots"
-            :collapsed="collapsedSections.hotspots"
-            :visible="visibleTypes.hotspots"
-            :selected-elements="selectedElements"
-            color-class="text-hotspot"
-            @toggle-collapse="toggleSection('hotspots')"
-            @toggle-visibility="toggleVisibility"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
+          <!-- Spatial Sections Group 2: Hotspots, Z-Planes -->
+          <template v-for="config in SPATIAL_SECTIONS_2" :key="config.type">
+            <ElementSection
+              :type="config.type"
+              :type-plural="config.typePlural"
+              :icon="config.icon"
+              :label="config.label"
+              :items="getElementItems(config.typePlural)"
+              :collapsed="collapsedSections[config.typePlural]"
+              :visible="visibleTypes[config.typePlural]"
+              :selected-elements="selectedElements"
+              :color-class="config.colorClass"
+              @toggle-collapse="toggleSection(config.typePlural)"
+              @toggle-visibility="toggleVisibility"
+              @add="handleAddElement"
+              @select="handleSelectElement"
+              @select-all="selectAllOfType"
+            />
+          </template>
 
-          <!-- Z-Planes Section -->
-          <ElementSection
-            type="zplane"
-            type-plural="zplanes"
-            icon="▤"
-            label="Z-Planes"
-            :items="currentScene.zplanes"
-            :collapsed="collapsedSections.zplanes"
-            :visible="visibleTypes.zplanes"
-            :selected-elements="selectedElements"
-            color-class="text-zplane"
-            @toggle-collapse="toggleSection('zplanes')"
-            @toggle-visibility="toggleVisibility"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Section divider for data elements -->
+          <!-- Data Elements Divider -->
           <div class="section-divider">
             <span class="divider-text">DATA ELEMENTS</span>
           </div>
 
-          <!-- Dialogs Section -->
-          <ElementSection
-            type="dialog"
-            type-plural="dialogs"
-            icon="💬"
-            label="Dialogs"
-            :items="currentScene.dialogs"
-            :collapsed="collapsedSections.dialogs"
-            :selected-elements="selectedElements"
-            color-class="text-dialog"
-            :show-visibility="false"
-            @toggle-collapse="toggleSection('dialogs')"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
+          <!-- Data Sections: Dialogs, Puzzles, SFX, Music, Cutscenes -->
+          <template v-for="config in DATA_SECTIONS" :key="config.type">
+            <ElementSection
+              :type="config.type"
+              :type-plural="config.typePlural"
+              :icon="config.icon"
+              :label="config.label"
+              :items="getElementItems(config.typePlural)"
+              :collapsed="collapsedSections[config.typePlural]"
+              :selected-elements="selectedElements"
+              :color-class="config.colorClass"
+              :show-visibility="false"
+              @toggle-collapse="toggleSection(config.typePlural)"
+              @add="handleAddElement"
+              @select="handleSelectElement"
+              @select-all="selectAllOfType"
+            >
+              <template #item-badges="{ item }">
+                <span v-if="getElementBadge(config, item)" class="item-badge">
+                  {{ getElementBadge(config, item) }}
+                </span>
+              </template>
+            </ElementSection>
+          </template>
 
-          <!-- Puzzles Section -->
-          <ElementSection
-            type="puzzle"
-            type-plural="puzzles"
-            icon="🧩"
-            label="Puzzles"
-            :items="currentScene.puzzles"
-            :collapsed="collapsedSections.puzzles"
-            :selected-elements="selectedElements"
-            color-class="text-puzzle"
-            :show-visibility="false"
-            @toggle-collapse="toggleSection('puzzles')"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Verbs section moved to Global Data area -->
-
-          <!-- SFX Section -->
-          <ElementSection
-            type="sfx"
-            type-plural="sfx"
-            icon="🔊"
-            label="SFX"
-            :items="currentScene.sfx"
-            :collapsed="collapsedSections.sfx"
-            :selected-elements="selectedElements"
-            color-class="text-sfx"
-            :show-visibility="false"
-            @toggle-collapse="toggleSection('sfx')"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Music Section -->
-          <ElementSection
-            type="music"
-            type-plural="music"
-            icon="🎵"
-            label="Music"
-            :items="currentScene.music"
-            :collapsed="collapsedSections.music"
-            :selected-elements="selectedElements"
-            color-class="text-music"
-            :show-visibility="false"
-            @toggle-collapse="toggleSection('music')"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          />
-
-          <!-- Cutscenes Section -->
-          <ElementSection
-            type="cutscene"
-            type-plural="cutscenes"
-            icon="🎬"
-            label="Cutscenes"
-            :items="currentScene.cutscenes"
-            :collapsed="collapsedSections.cutscenes"
-            :selected-elements="selectedElements"
-            color-class="text-cutscene"
-            :show-visibility="false"
-            @toggle-collapse="toggleSection('cutscenes')"
-            @add="handleAddElement"
-            @select="handleSelectElement"
-            @select-all="selectAllOfType"
-          >
-            <template #item-badges="{ item }">
-              <span class="item-badge" v-if="item.actions?.length > 0">{{ item.actions.length }}</span>
-            </template>
-          </ElementSection>
-
-          <!-- Animations Section -->
+          <!-- Animations Section (special) -->
           <AnimationsSection
             :animations="globalAnimations"
             :collapsed="collapsedSections.animations"
@@ -1810,7 +1739,7 @@ onUnmounted(() => {
             @select="handleSelectElement"
           />
 
-          <!-- Lights Section -->
+          <!-- Lights Section (special) -->
           <LightsSection
             :lighting="currentScene.lighting"
             :collapsed="collapsedSections.lights"
@@ -1827,18 +1756,18 @@ onUnmounted(() => {
 
           <!-- Particles Section -->
           <ElementSection
-            type="particle"
-            type-plural="particles"
-            icon="✨"
-            label="Particles"
-            :items="currentScene.particles"
-            :collapsed="collapsedSections.particles"
-            :visible="visibleTypes.particles"
+            :type="PARTICLE_SECTION.type"
+            :type-plural="PARTICLE_SECTION.typePlural"
+            :icon="PARTICLE_SECTION.icon"
+            :label="PARTICLE_SECTION.label"
+            :items="getElementItems(PARTICLE_SECTION.typePlural)"
+            :collapsed="collapsedSections[PARTICLE_SECTION.typePlural]"
+            :visible="visibleTypes[PARTICLE_SECTION.typePlural]"
             :selected-elements="selectedElements"
-            color-class="text-particle"
+            :color-class="PARTICLE_SECTION.colorClass"
             :show-select-all="false"
             :get-item-icon="(item) => getParticleIcon(item.preset)"
-            @toggle-collapse="toggleSection('particles')"
+            @toggle-collapse="toggleSection(PARTICLE_SECTION.typePlural)"
             @toggle-visibility="toggleVisibility"
             @add="handleAddElement"
             @select="handleSelectElement"
