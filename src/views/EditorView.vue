@@ -72,7 +72,8 @@ import {
   SceneSettingsPanel,
   RenameSceneModal,
   PlaceActorModal,
-  AddToInventoryModal
+  AddToInventoryModal,
+  EditorContextMenu
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -5117,88 +5118,22 @@ onUnmounted(() => {
     </footer>
 
     <!-- Context Menu -->
-    <Teleport to="body">
-      <div
-        v-if="contextMenu.visible"
-        class="context-menu pixel-border"
-        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-        @click.stop
-      >
-        <div class="context-menu-header" v-if="selectedElements.length > 0">
-          {{ selectedElements.length }} element{{ selectedElements.length > 1 ? 's' : '' }} selected
-        </div>
-
-        <!-- Group options -->
-        <button
-          v-if="canGroup && !selectionInGroup"
-          class="context-menu-item"
-          @click="createGroup"
-        >
-          <span class="menu-icon">🔗</span>
-          Group Elements
-        </button>
-
-        <button
-          v-if="selectionInGroup"
-          class="context-menu-item"
-          @click="selectGroup"
-        >
-          <span class="menu-icon">⬚</span>
-          Select Entire Group
-        </button>
-
-        <button
-          v-if="selectionInGroup"
-          class="context-menu-item"
-          @click="ungroupSelected"
-        >
-          <span class="menu-icon">🔓</span>
-          Ungroup
-        </button>
-
-        <button
-          v-if="currentScene.groups && currentScene.groups.length > 0"
-          class="context-menu-item danger"
-          @click="clearAllGroups"
-        >
-          <span class="menu-icon">🗑️</span>
-          Clear All Groups
-        </button>
-
-        <div v-if="selectedElements.length > 0 && (canGroup || selectionInGroup)" class="context-menu-divider"></div>
-
-        <!-- Common actions -->
-        <button
-          v-if="selectedElements.length > 0"
-          class="context-menu-item"
-          @click="duplicateSelected"
-        >
-          <span class="menu-icon">📋</span>
-          Duplicate
-        </button>
-
-        <button
-          v-if="selectedElements.length > 0"
-          class="context-menu-item context-menu-item-danger"
-          @click="deleteSelected"
-        >
-          <span class="menu-icon">🗑</span>
-          Delete
-        </button>
-
-        <!-- Group info -->
-        <div v-if="selectedGroup" class="context-menu-divider"></div>
-        <div v-if="selectedGroup" class="context-menu-info">
-          <span class="menu-icon">📁</span>
-          Group: {{ selectedGroup.name }}
-        </div>
-
-        <!-- No selection -->
-        <div v-if="selectedElements.length === 0" class="context-menu-info">
-          No elements selected
-        </div>
-      </div>
-    </Teleport>
+    <EditorContextMenu
+      :visible="contextMenu.visible"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :selected-count="selectedElements.length"
+      :can-group="canGroup"
+      :selection-in-group="selectionInGroup"
+      :has-groups="currentScene.groups && currentScene.groups.length > 0"
+      :selected-group="selectedGroup"
+      @create-group="createGroup"
+      @select-group="selectGroup"
+      @ungroup="ungroupSelected"
+      @clear-all-groups="clearAllGroups"
+      @duplicate="duplicateSelected"
+      @delete="deleteSelected"
+    />
 
     <!-- AI Assistant Modal -->
     <AiAssistantModal

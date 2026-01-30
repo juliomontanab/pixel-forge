@@ -31,6 +31,7 @@ export { default as EditorHeader } from './editor/EditorHeader.vue'
 export { default as EditorStatusBar } from './editor/EditorStatusBar.vue'
 export { default as PlayModeOverlay } from './editor/PlayModeOverlay.vue'
 export { default as SceneActionsBar } from './editor/SceneActionsBar.vue'
+export { default as EditorContextMenu } from './editor/EditorContextMenu.vue'
 
 // Panel Components
 export { default as LeftPanel } from './panels/LeftPanel.vue'
