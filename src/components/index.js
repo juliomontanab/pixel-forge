@@ -22,6 +22,9 @@ export { default as AssetManagerModal } from './modals/AssetManagerModal.vue'
 export { default as AudioManagerModal } from './modals/AudioManagerModal.vue'
 export { default as SpritesheetEditorModal } from './modals/SpritesheetEditorModal.vue'
 export { default as AiAssistantModal } from './modals/AiAssistantModal.vue'
+export { default as RenameSceneModal } from './modals/RenameSceneModal.vue'
+export { default as PlaceActorModal } from './modals/PlaceActorModal.vue'
+export { default as AddToInventoryModal } from './modals/AddToInventoryModal.vue'
 
 // Editor Components
 export { default as EditorHeader } from './editor/EditorHeader.vue'

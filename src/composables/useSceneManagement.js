@@ -214,13 +214,14 @@ export function useSceneManagement(options = {}) {
   /**
    * Confirm rename scene
    */
-  const confirmRenameScene = () => {
+  const confirmRenameScene = (newName) => {
     if (!project?.value) return
 
-    if (renameSceneValue.value.trim()) {
+    const nameToUse = newName !== undefined ? newName : renameSceneValue.value
+    if (nameToUse && nameToUse.trim()) {
       const scene = project.value.scenes.find(s => s.id === project.value.currentSceneId)
       if (scene) {
-        scene.name = renameSceneValue.value.trim()
+        scene.name = nameToUse.trim()
       }
     }
     showRenameSceneModal.value = false

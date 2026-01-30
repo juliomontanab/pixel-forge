@@ -69,7 +69,10 @@ import {
   AiAssistantModal,
   ActorProperties,
   ExitProperties,
-  SceneSettingsPanel
+  SceneSettingsPanel,
+  RenameSceneModal,
+  PlaceActorModal,
+  AddToInventoryModal
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -5210,91 +5213,29 @@ onUnmounted(() => {
     />
 
     <!-- Rename Scene Modal -->
-    <div v-if="showRenameSceneModal" class="modal-overlay" @click.self="showRenameSceneModal = false">
-      <div class="modal-content small-modal">
-        <header class="modal-header">
-          <h3>Rename Scene</h3>
-          <button class="modal-close-btn" @click="showRenameSceneModal = false">✕</button>
-        </header>
-        <div class="modal-body">
-          <input
-            v-model="renameSceneValue"
-            type="text"
-            class="property-input"
-            placeholder="Scene name"
-            @keyup.enter="confirmRenameScene"
-            autofocus
-          />
-        </div>
-        <footer class="modal-footer">
-          <button class="modal-btn secondary" @click="showRenameSceneModal = false">Cancel</button>
-          <button class="modal-btn" @click="confirmRenameScene">Rename</button>
-        </footer>
-      </div>
-    </div>
+    <RenameSceneModal
+      v-model="showRenameSceneModal"
+      :scene-name="renameSceneValue"
+      @confirm="confirmRenameScene"
+    />
 
     <!-- Place Actor Modal -->
-    <div v-if="showPlaceActorModal" class="modal-overlay" @click.self="showPlaceActorModal = false">
-      <div class="modal-content small-modal">
-        <header class="modal-header">
-          <h3>Place Actor in Scene</h3>
-          <button class="modal-close-btn" @click="showPlaceActorModal = false">✕</button>
-        </header>
-        <div class="modal-body">
-          <p v-if="project.globalData.actors.length === 0" class="empty-section">No characters defined. Create characters first.</p>
-          <div v-else class="inventory-add-list">
-            <div
-              v-for="actor in project.globalData.actors"
-              :key="actor.id"
-              class="inventory-add-item"
-              :class="{ 'in-inventory': currentScene.actorPlacements.some(p => p.actorId === actor.id) }"
-              @click="placeActorInScene(actor.id); showPlaceActorModal = false"
-            >
-              <span class="item-icon">👤</span>
-              <span class="item-name">{{ actor.name }}</span>
-              <span v-if="currentScene.actorPlacements.some(p => p.actorId === actor.id)" class="item-check">✓</span>
-            </div>
-          </div>
-        </div>
-        <footer class="modal-footer">
-          <button class="modal-btn" @click="showPlaceActorModal = false">Done</button>
-        </footer>
-      </div>
-    </div>
+    <PlaceActorModal
+      v-model="showPlaceActorModal"
+      :actors="project.globalData.actors"
+      :placed-actor-ids="currentScene.actorPlacements.map(p => p.actorId)"
+      @place-actor="placeActorInScene"
+    />
 
     <!-- Add to Inventory Modal -->
-    <div v-if="showAddToInventoryModal" class="modal-overlay" @click.self="showAddToInventoryModal = false">
-      <div class="modal-content small-modal">
-        <header class="modal-header">
-          <h3>Add Item to Inventory</h3>
-          <button class="modal-close-btn" @click="showAddToInventoryModal = false">✕</button>
-        </header>
-        <div class="modal-body">
-          <p v-if="project.globalData.items.length === 0" class="empty-section">No items defined. Create items first.</p>
-          <div v-else class="inventory-add-list">
-            <div
-              v-for="item in project.globalData.items"
-              :key="item.id"
-              class="inventory-add-item"
-              :class="{ 'in-inventory': project.globalData.inventory.includes(item.id) }"
-              @click="toggleInventoryItem(item.id)"
-            >
-              <span
-                v-if="itemHasAssetIcon(item)"
-                class="item-icon item-icon-asset"
-                :style="getItemIconStyle(item)"
-              ></span>
-              <span v-else class="item-icon">{{ item.icon || '📦' }}</span>
-              <span class="item-name">{{ item.name }}</span>
-              <span v-if="project.globalData.inventory.includes(item.id)" class="item-check">✓</span>
-            </div>
-          </div>
-        </div>
-        <footer class="modal-footer">
-          <button class="modal-btn" @click="showAddToInventoryModal = false">Done</button>
-        </footer>
-      </div>
-    </div>
+    <AddToInventoryModal
+      v-model="showAddToInventoryModal"
+      :items="project.globalData.items"
+      :inventory="project.globalData.inventory"
+      :get-item-icon-style="getItemIconStyle"
+      :item-has-asset-icon="itemHasAssetIcon"
+      @toggle-item="toggleInventoryItem"
+    />
 
     <!-- Asset Manager Modal -->
     <div v-if="showAssetManagerModal" class="modal-overlay asset-manager-overlay" @click.self="showAssetManagerModal = false">
