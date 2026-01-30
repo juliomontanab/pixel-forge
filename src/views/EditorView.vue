@@ -73,7 +73,10 @@ import {
   RenameSceneModal,
   PlaceActorModal,
   AddToInventoryModal,
-  EditorContextMenu
+  EditorContextMenu,
+  WalkboxProperties,
+  ZPlaneProperties,
+  VerbProperties
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -4934,40 +4937,16 @@ onUnmounted(() => {
             />
 
             <!-- Z-Plane-specific properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'zplane'">
-              <label class="property-label">Z-Index</label>
-              <input
-                v-model.number="selectedElements[0].element.zIndex"
-                type="number"
-                class="property-input"
-              />
-            </div>
-            <!-- Walkbox rotation -->
-            <div class="property-group" v-if="selectedElements[0].type === 'walkbox' && selectedElements[0].element.rotation !== undefined">
-              <label class="property-label">Rotation</label>
-              <div class="property-row">
-                <input
-                  v-model.number="selectedElements[0].element.rotation"
-                  type="number"
-                  class="property-input"
-                  placeholder="0"
-                  min="0"
-                  max="360"
-                />
-                <span class="property-unit">°</span>
-              </div>
-            </div>
-            <!-- Walkbox points (simplified display) -->
-            <div class="property-group" v-if="selectedElements[0].type === 'walkbox' && selectedElements[0].element.points">
-              <label class="property-label">Points</label>
-              <div class="walkbox-points">
-                <div v-for="(point, idx) in selectedElements[0].element.points" :key="idx" class="point-row">
-                  <span class="point-label">P{{ idx + 1 }}:</span>
-                  <input v-model.number="point.x" type="number" class="property-input tiny" />
-                  <input v-model.number="point.y" type="number" class="property-input tiny" />
-                </div>
-              </div>
-            </div>
+            <ZPlaneProperties
+              v-if="selectedElements[0].type === 'zplane'"
+              :element="selectedElements[0].element"
+            />
+
+            <!-- Walkbox properties -->
+            <WalkboxProperties
+              v-if="selectedElements[0].type === 'walkbox'"
+              :element="selectedElements[0].element"
+            />
 
             <!-- Dialog properties -->
             <!-- Dialog properties -->
@@ -5007,27 +4986,10 @@ onUnmounted(() => {
             />
 
             <!-- Verb properties -->
-            <template v-if="selectedElements[0].type === 'verb'">
-              <div class="property-group">
-                <label class="property-label">Icon</label>
-                <input
-                  v-model="selectedElements[0].element.icon"
-                  type="text"
-                  class="property-input"
-                  placeholder="Emoji icon"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Hotkey</label>
-                <input
-                  v-model="selectedElements[0].element.key"
-                  type="text"
-                  class="property-input"
-                  placeholder="Key (e.g., 'l')"
-                  maxlength="1"
-                />
-              </div>
-            </template>
+            <VerbProperties
+              v-if="selectedElements[0].type === 'verb'"
+              :element="selectedElements[0].element"
+            />
 
             <!-- SFX properties -->
             <AudioProperties

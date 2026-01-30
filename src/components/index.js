@@ -64,6 +64,9 @@ export { default as ImageProperties } from './properties/ImageProperties.vue'
 export { default as ActorProperties } from './properties/ActorProperties.vue'
 export { default as ExitProperties } from './properties/ExitProperties.vue'
 export { default as SceneSettingsPanel } from './properties/SceneSettingsPanel.vue'
+export { default as WalkboxProperties } from './properties/WalkboxProperties.vue'
+export { default as ZPlaneProperties } from './properties/ZPlaneProperties.vue'
+export { default as VerbProperties } from './properties/VerbProperties.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
