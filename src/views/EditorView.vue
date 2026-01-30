@@ -63,7 +63,10 @@ import {
   ParticleProperties,
   ItemProperties,
   DialogProperties,
-  AudioProperties
+  AudioProperties,
+  InteractionsPanel,
+  ImageProperties,
+  AiAssistantModal
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -4943,123 +4946,14 @@ onUnmounted(() => {
               </div>
             </div>
             <!-- Image-specific properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'image'">
-              <label class="property-label">Behavior</label>
-              <div class="property-checkboxes">
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    v-model="selectedElements[0].element.interactive"
-                  />
-                  <span>Interactive</span>
-                </label>
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    v-model="selectedElements[0].element.pickable"
-                  />
-                  <span>Pickable</span>
-                </label>
-              </div>
-            </div>
-            <div class="property-group" v-if="selectedElements[0].type === 'image'">
-              <label class="property-label">Z-Order</label>
-              <input
-                v-model.number="selectedElements[0].element.zOrder"
-                type="number"
-                class="property-input"
-                placeholder="0"
-              />
-            </div>
-            <!-- Image Asset -->
-            <div class="property-group" v-if="selectedElements[0].type === 'image'">
-              <label class="property-label">Image Asset</label>
-              <div class="asset-selector">
-                <select
-                  v-model="selectedElements[0].element.assetId"
-                  class="property-select"
-                >
-                  <option :value="null">-- No image --</option>
-                  <option
-                    v-for="asset in project.globalData.assets"
-                    :key="asset.id"
-                    :value="asset.id"
-                  >
-                    {{ asset.name }} ({{ asset.width }}×{{ asset.height }})
-                  </option>
-                </select>
-                <div
-                  v-if="selectedElements[0].element.assetId && getAssetById(selectedElements[0].element.assetId)"
-                  class="asset-preview-small"
-                  :style="{ backgroundImage: getAssetDisplayUrl(getAssetById(selectedElements[0].element.assetId)) ? `url(${getAssetDisplayUrl(getAssetById(selectedElements[0].element.assetId))})` : 'none' }"
-                ></div>
-              </div>
-            </div>
-            <!-- Parallax Properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'image'">
-              <label class="property-label">
-                <input
-                  type="checkbox"
-                  v-model="selectedElements[0].element.parallax.enabled"
-                  @change="ensureParallaxDefaults(selectedElements[0].element)"
-                />
-                Parallax Effect
-              </label>
-            </div>
-            <template v-if="selectedElements[0].type === 'image' && selectedElements[0].element.parallax?.enabled">
-              <div class="property-group">
-                <label class="property-label">Depth Layer</label>
-                <div class="parallax-depth-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    v-model.number="selectedElements[0].element.parallax.depth"
-                    class="property-range"
-                  />
-                  <span class="property-value">{{ selectedElements[0].element.parallax.depth.toFixed(1) }}</span>
-                </div>
-                <div class="depth-hints">
-                  <span class="hint-item" :class="{ active: selectedElements[0].element.parallax.depth < 0.5 }">🏔 Far BG</span>
-                  <span class="hint-item" :class="{ active: selectedElements[0].element.parallax.depth >= 0.5 && selectedElements[0].element.parallax.depth < 1 }">🌳 Mid BG</span>
-                  <span class="hint-item" :class="{ active: selectedElements[0].element.parallax.depth >= 1 && selectedElements[0].element.parallax.depth <= 1.1 }">🚶 Normal</span>
-                  <span class="hint-item" :class="{ active: selectedElements[0].element.parallax.depth > 1.1 }">🌿 Foreground</span>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Tiling</label>
-                <div class="property-checkboxes">
-                  <label class="checkbox-label">
-                    <input type="checkbox" v-model="selectedElements[0].element.parallax.repeatX" />
-                    <span>Repeat X</span>
-                  </label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" v-model="selectedElements[0].element.parallax.repeatY" />
-                    <span>Repeat Y</span>
-                  </label>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Auto-Scroll (px/sec)</label>
-                <div class="property-row">
-                  <label class="property-sublabel">X</label>
-                  <input
-                    type="number"
-                    v-model.number="selectedElements[0].element.parallax.autoScrollX"
-                    class="property-input-sm"
-                    placeholder="0"
-                  />
-                  <label class="property-sublabel">Y</label>
-                  <input
-                    type="number"
-                    v-model.number="selectedElements[0].element.parallax.autoScrollY"
-                    class="property-input-sm"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            </template>
+            <ImageProperties
+              v-if="selectedElements[0].type === 'image'"
+              :element="selectedElements[0].element"
+              :assets="project.globalData.assets"
+              :get-asset-by-id="getAssetById"
+              :get-asset-display-url="getAssetDisplayUrl"
+              @ensure-parallax-defaults="ensureParallaxDefaults"
+            />
             <!-- Exit-specific properties -->
             <div class="property-group" v-if="selectedElements[0].type === 'exit'">
               <label class="property-label">Target Scene</label>
@@ -5133,202 +5027,19 @@ onUnmounted(() => {
               />
             </div>
 
-            <!-- ===================== -->
-            <!-- INTERACTIONS PANEL (for images and hotspots) -->
-            <!-- ===================== -->
-            <template v-if="selectedElements[0].type === 'hotspot' || (selectedElements[0].type === 'image' && selectedElements[0].element.interactive)">
-              <div class="property-divider"></div>
-              <div class="property-group">
-                <label class="property-label">🎯 Interactions</label>
-                <p class="hint-text pixel-font-xs">Define what happens when player uses verbs on this element</p>
-              </div>
-
-              <!-- Default description (Look at) -->
-              <div class="property-group">
-                <label class="property-label">Default Description</label>
-                <textarea
-                  v-model="selectedElements[0].element.description"
-                  class="property-textarea"
-                  placeholder="Text shown when player looks at this..."
-                  rows="2"
-                ></textarea>
-              </div>
-
-              <!-- Interactions list -->
-              <div class="property-group">
-                <label class="property-label">
-                  Verb Actions ({{ selectedElements[0].element.interactions?.length || 0 }})
-                  <button class="btn-add-small" @click="addInteraction(selectedElements[0].element)">+ Add</button>
-                </label>
-                <div class="interactions-list" v-if="selectedElements[0].element.interactions?.length">
-                  <div
-                    v-for="(interaction, idx) in selectedElements[0].element.interactions"
-                    :key="idx"
-                    class="interaction-item"
-                  >
-                    <div class="interaction-header">
-                      <select v-model="interaction.verbId" class="property-select small">
-                        <option :value="null">-- Verb --</option>
-                        <option v-for="verb in project.globalData.verbs" :key="verb.id" :value="verb.id">
-                          {{ verb.icon }} {{ verb.name }}
-                        </option>
-                      </select>
-                      <button class="btn-remove-small" @click="removeInteraction(selectedElements[0].element, idx)">✕</button>
-                    </div>
-                    <div class="interaction-config">
-                      <select v-model="interaction.action" class="property-select">
-                        <option value="dialog">💬 Show Dialog</option>
-                        <option value="dialogRef">📝 Play Dialog (from list)</option>
-                        <option value="cutscene">🎬 Play Cutscene</option>
-                        <option value="pickup">✋ Pick Up Item</option>
-                        <option value="use_item">🔧 Require Item</option>
-                        <option value="change_scene">🚪 Change Scene</option>
-                        <option value="set_variable">📊 Set Variable</option>
-                        <option value="custom">⚡ Custom Script</option>
-                      </select>
-
-                      <!-- Dialog action params -->
-                      <template v-if="interaction.action === 'dialog'">
-                        <textarea
-                          v-model="interaction.params.text"
-                          class="property-textarea"
-                          placeholder="Dialog text..."
-                          rows="2"
-                        ></textarea>
-                        <select v-model="interaction.params.actorId" class="property-select small">
-                          <option :value="null">Narrator</option>
-                          <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                            {{ actor.name }}
-                          </option>
-                        </select>
-                      </template>
-
-                      <!-- Dialog reference params -->
-                      <template v-if="interaction.action === 'dialogRef'">
-                        <select v-model="interaction.params.dialogId" class="property-select">
-                          <option :value="null">-- Select Dialog --</option>
-                          <option v-for="dlg in currentScene.dialogs" :key="dlg.id" :value="dlg.id">
-                            {{ dlg.name }}
-                          </option>
-                        </select>
-                      </template>
-
-                      <!-- Cutscene params -->
-                      <template v-if="interaction.action === 'cutscene'">
-                        <select v-model="interaction.params.cutsceneId" class="property-select">
-                          <option :value="null">-- Select Cutscene --</option>
-                          <option v-for="cs in currentScene.cutscenes" :key="cs.id" :value="cs.id">
-                            {{ cs.name }}
-                          </option>
-                        </select>
-                      </template>
-
-                      <!-- Pickup params -->
-                      <template v-if="interaction.action === 'pickup'">
-                        <select v-model="interaction.params.itemId" class="property-select">
-                          <option :value="null">-- Select Item --</option>
-                          <option v-for="item in project.globalData.items" :key="item.id" :value="item.id">
-                            {{ item.name }}
-                          </option>
-                        </select>
-                        <label class="checkbox-label small">
-                          <input type="checkbox" v-model="interaction.params.removeFromScene" />
-                          Remove from scene after pickup
-                        </label>
-                      </template>
-
-                      <!-- Use item params -->
-                      <template v-if="interaction.action === 'use_item'">
-                        <select v-model="interaction.params.requiredItemId" class="property-select">
-                          <option :value="null">-- Required Item --</option>
-                          <option v-for="item in project.globalData.items" :key="item.id" :value="item.id">
-                            {{ item.name }}
-                          </option>
-                        </select>
-                        <textarea
-                          v-model="interaction.params.successText"
-                          class="property-textarea"
-                          placeholder="Success message..."
-                          rows="1"
-                        ></textarea>
-                        <textarea
-                          v-model="interaction.params.failText"
-                          class="property-textarea"
-                          placeholder="Fail message (no item)..."
-                          rows="1"
-                        ></textarea>
-                      </template>
-
-                      <!-- Change scene params -->
-                      <template v-if="interaction.action === 'change_scene'">
-                        <select v-model="interaction.params.sceneId" class="property-select">
-                          <option :value="null">-- Select Scene --</option>
-                          <option v-for="scene in project.scenes" :key="scene.id" :value="scene.id">
-                            {{ scene.name }}
-                          </option>
-                        </select>
-                      </template>
-
-                      <!-- Set variable params -->
-                      <template v-if="interaction.action === 'set_variable'">
-                        <input
-                          v-model="interaction.params.varName"
-                          class="property-input"
-                          placeholder="Variable name"
-                        />
-                        <input
-                          v-model="interaction.params.varValue"
-                          class="property-input"
-                          placeholder="Value"
-                        />
-                      </template>
-
-                      <!-- Custom script -->
-                      <template v-if="interaction.action === 'custom'">
-                        <textarea
-                          v-model="interaction.params.script"
-                          class="property-textarea code"
-                          placeholder="// Custom script..."
-                          rows="3"
-                        ></textarea>
-                      </template>
-
-                      <!-- Condition (optional) -->
-                      <div class="interaction-condition">
-                        <label class="checkbox-label small">
-                          <input type="checkbox" v-model="interaction.hasCondition" />
-                          Requires condition
-                        </label>
-                        <template v-if="interaction.hasCondition">
-                          <div class="condition-row">
-                            <input
-                              v-model="interaction.condition.varName"
-                              class="property-input small"
-                              placeholder="Variable"
-                            />
-                            <select v-model="interaction.condition.operator" class="property-select tiny">
-                              <option value="==">==</option>
-                              <option value="!=">!=</option>
-                              <option value=">">></option>
-                              <option value="<"><</option>
-                              <option value=">=">>=</option>
-                              <option value="<="><=</option>
-                            </select>
-                            <input
-                              v-model="interaction.condition.value"
-                              class="property-input small"
-                              placeholder="Value"
-                            />
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="hint-text pixel-font-xs text-muted">No interactions defined. Click "+ Add" to create one.</p>
-              </div>
-            </template>
-            <!-- END INTERACTIONS PANEL -->
+            <!-- Interactions Panel (for hotspots and interactive images) -->
+            <InteractionsPanel
+              v-if="selectedElements[0].type === 'hotspot' || (selectedElements[0].type === 'image' && selectedElements[0].element.interactive)"
+              :element="selectedElements[0].element"
+              :verbs="project.globalData.verbs"
+              :actors="project.globalData.actors"
+              :dialogs="currentScene.dialogs"
+              :cutscenes="currentScene.cutscenes"
+              :items="project.globalData.items"
+              :scenes="project.scenes"
+              @add-interaction="addInteraction"
+              @remove-interaction="removeInteraction"
+            />
 
             <!-- Z-Plane-specific properties -->
             <div class="property-group" v-if="selectedElements[0].type === 'zplane'">
@@ -5598,103 +5309,17 @@ onUnmounted(() => {
       </div>
     </Teleport>
 
-    <!-- AI Assistant Panel -->
-    <div v-if="aiPanelOpen" class="modal-overlay ai-panel-overlay" @click.self="closeAiPanel">
-      <div class="modal-content ai-panel-modal">
-        <header class="modal-header ai-header">
-          <div class="ai-header-left">
-            <span class="ai-icon">🤖</span>
-            <h3>AI Assistant</h3>
-          </div>
-          <div class="ai-header-status">
-            <span class="ai-connection-status" :class="{ connected: claudeIsConnected }">
-              {{ claudeIsConnected ? '● Connected' : '○ Disconnected' }}
-            </span>
-          </div>
-          <button class="modal-close-btn" @click="closeAiPanel">✕</button>
-        </header>
-
-        <div class="modal-body ai-body">
-          <!-- Status Bar -->
-          <div class="ai-status-bar" :class="aiStatus">
-            <span class="ai-status-icon">
-              <template v-if="aiStatus === 'idle'">💡</template>
-              <template v-else-if="aiStatus === 'connecting'">🔄</template>
-              <template v-else-if="aiStatus === 'generating'">⚙️</template>
-              <template v-else-if="aiStatus === 'complete'">✅</template>
-              <template v-else-if="aiStatus === 'error'">❌</template>
-            </span>
-            <span class="ai-status-message">{{ aiStatusMessage || 'Escribe un script y presiona Generar' }}</span>
-          </div>
-
-          <!-- Script Editor -->
-          <div class="ai-script-section">
-            <div class="ai-script-header">
-              <label class="ai-label">Script del Juego (Markdown)</label>
-              <button class="ai-sample-btn" @click="loadSampleScript" title="Load sample script">
-                📝 Cargar Ejemplo
-              </button>
-            </div>
-            <textarea
-              v-model="aiScript"
-              class="ai-script-textarea"
-              placeholder="# MI JUEGO
-
-## PERSONAJES
-### PROTAGONISTA
-- Rol: Protagonista
-- Descripción: ...
-
-## ESCENAS
-### Escena Inicial
-Descripción: ...
-Elementos:
-- Puerta (exit) → Siguiente escena
-
-## PUZZLES
-..."
-              :disabled="aiStatus === 'generating'"
-            ></textarea>
-          </div>
-
-          <!-- Script Tips -->
-          <div class="ai-tips">
-            <details>
-              <summary>📖 Guía de formato del script</summary>
-              <div class="ai-tips-content">
-                <p><strong># TÍTULO</strong> - Nombre del juego</p>
-                <p><strong>## PERSONAJES</strong> - Define actores con rol, descripción y ubicación</p>
-                <p><strong>## ITEMS</strong> - Objetos recogibles con icono y descripción</p>
-                <p><strong>## ESCENAS</strong> - Lugares con elementos, hotspots y exits</p>
-                <p><strong>## DIÁLOGOS</strong> - Conversaciones con opciones</p>
-                <p><strong>## PUZZLES</strong> - Acertijos con condiciones y resultados</p>
-              </div>
-            </details>
-          </div>
-        </div>
-
-        <footer class="modal-footer ai-footer">
-          <div class="ai-footer-left">
-            <span class="ai-char-count">{{ aiScript.length }} caracteres</span>
-          </div>
-          <div class="ai-footer-right">
-            <button class="modal-btn secondary" @click="closeAiPanel">Cancelar</button>
-            <button
-              class="modal-btn ai-generate-btn"
-              @click="handleAiGenerate"
-              :disabled="aiStatus === 'generating' || aiStatus === 'connecting' || !aiScript.trim()"
-            >
-              <template v-if="aiStatus === 'generating'">
-                <span class="generating-spinner">⚙️</span> Generando...
-              </template>
-              <template v-else>
-                🚀 Generar Proyecto
-              </template>
-            </button>
-          </div>
-        </footer>
-      </div>
-    </div>
+    <!-- AI Assistant Modal -->
+    <AiAssistantModal
+      v-model="aiPanelOpen"
+      :claude-is-connected="claudeIsConnected"
+      :ai-status="aiStatus"
+      :ai-status-message="aiStatusMessage"
+      :ai-script="aiScript"
+      @update:ai-script="aiScript = $event"
+      @generate="handleAiGenerate"
+      @load-sample="loadSampleScript"
+    />
 
     <!-- Rename Scene Modal -->
     <div v-if="showRenameSceneModal" class="modal-overlay" @click.self="showRenameSceneModal = false">

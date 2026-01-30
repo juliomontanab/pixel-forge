@@ -21,6 +21,7 @@ export { default as BackgroundScaleModal } from './common/BackgroundScaleModal.v
 export { default as AssetManagerModal } from './modals/AssetManagerModal.vue'
 export { default as AudioManagerModal } from './modals/AudioManagerModal.vue'
 export { default as SpritesheetEditorModal } from './modals/SpritesheetEditorModal.vue'
+export { default as AiAssistantModal } from './modals/AiAssistantModal.vue'
 
 // Editor Components
 export { default as EditorHeader } from './editor/EditorHeader.vue'
@@ -54,6 +55,8 @@ export { default as ParticleProperties } from './properties/ParticleProperties.v
 export { default as ItemProperties } from './properties/ItemProperties.vue'
 export { default as DialogProperties } from './properties/DialogProperties.vue'
 export { default as AudioProperties } from './properties/AudioProperties.vue'
+export { default as InteractionsPanel } from './properties/InteractionsPanel.vue'
+export { default as ImageProperties } from './properties/ImageProperties.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
