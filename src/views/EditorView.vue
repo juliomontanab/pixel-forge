@@ -15,6 +15,12 @@ import { useAudioPlayback } from '@/composables/useAudioPlayback'
 import { useElementCRUD } from '@/composables/useElementCRUD'
 import { usePlayMode } from '@/composables/usePlayMode'
 import { useCutsceneEngine } from '@/composables/useCutsceneEngine'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { useWalkboxResize } from '@/composables/useWalkboxResize'
+import { useSceneManagement } from '@/composables/useSceneManagement'
+import { useGlobalActors } from '@/composables/useGlobalActors'
+import { usePuzzleHelpers } from '@/composables/usePuzzleHelpers'
+import { useInteractionSystem } from '@/composables/useInteractionSystem'
 
 // Refactored components
 import {
@@ -294,169 +300,6 @@ const globalInventory = computed(() => project.value.globalData?.inventory || []
 const globalActors = computed(() => project.value.globalData?.actors || [])
 const globalVerbs = computed(() => project.value.globalData?.verbs || [])
 const globalVariables = computed(() => project.value.globalData?.variables || {})
-
-// =====================
-// SCENE MANAGEMENT
-// =====================
-
-// Switch to a different scene
-const switchScene = (sceneId) => {
-  if (project.value.scenes.some(s => s.id === sceneId)) {
-    project.value.currentSceneId = sceneId
-    selectedElements.value = []
-  }
-}
-
-// Create a new scene
-const createNewScene = () => {
-  const newId = 'scene-' + Date.now()
-  const newScene = {
-    id: newId,
-    name: 'New Scene',
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-    background: null,
-    images: [],
-    walkboxes: [],
-    exits: [],
-    actorPlacements: [],
-    hotspots: [],
-    zplanes: [],
-    dialogs: [],
-    puzzles: [],
-    sfx: [],
-    music: [],
-    cutscenes: [],
-    animations: [],
-    lighting: {
-      ambient: { color: '#ffffff', intensity: 1.0 },
-      lights: []
-    },
-    particles: [],
-    groups: [],
-    elementFolders: []
-  }
-  project.value.scenes.push(newScene)
-  project.value.currentSceneId = newId
-  selectedElements.value = []
-}
-
-// Delete current scene
-const deleteCurrentScene = () => {
-  if (project.value.scenes.length <= 1) {
-    alert('Cannot delete the last scene')
-    return
-  }
-  const currentId = project.value.currentSceneId
-  const index = project.value.scenes.findIndex(s => s.id === currentId)
-  project.value.scenes.splice(index, 1)
-  // Switch to another scene
-  project.value.currentSceneId = project.value.scenes[0].id
-  selectedElements.value = []
-}
-
-// Duplicate current scene
-const duplicateCurrentScene = () => {
-  const current = currentScene.value
-  const newId = 'scene-' + Date.now()
-  const duplicated = {
-    ...deepClone(current),
-    id: newId,
-    name: current.name + ' (copy)'
-  }
-  project.value.scenes.push(duplicated)
-  project.value.currentSceneId = newId
-  selectedElements.value = []
-}
-
-// Rename scene modal
-const showRenameSceneModal = ref(false)
-const renameSceneValue = ref('')
-
-const openRenameSceneModal = () => {
-  renameSceneValue.value = currentScene.value.name
-  showRenameSceneModal.value = true
-}
-
-const confirmRenameScene = () => {
-  if (renameSceneValue.value.trim()) {
-    const scene = project.value.scenes.find(s => s.id === project.value.currentSceneId)
-    if (scene) {
-      scene.name = renameSceneValue.value.trim()
-    }
-  }
-  showRenameSceneModal.value = false
-}
-
-// =====================
-// GLOBAL ACTOR MANAGEMENT
-// =====================
-
-// Add global actor
-const addGlobalActor = () => {
-  project.value.globalData.actors.push({
-    id: Date.now(),
-    name: 'New Actor',
-    costume: 'default',
-    animations: {
-      idle: null,
-      'walk-north': null,
-      'walk-south': null,
-      'walk-east': null,
-      'walk-west': null,
-      'talk': null
-    }
-  })
-}
-
-// Remove global actor
-const removeGlobalActor = (actorId) => {
-  const index = project.value.globalData.actors.findIndex(a => a.id === actorId)
-  if (index > -1) {
-    project.value.globalData.actors.splice(index, 1)
-    // Also remove placements from all scenes
-    project.value.scenes.forEach(scene => {
-      scene.actorPlacements = scene.actorPlacements.filter(p => p.actorId !== actorId)
-    })
-  }
-}
-
-// Place actor in current scene
-const placeActorInScene = (actorId) => {
-  const actor = project.value.globalData.actors.find(a => a.id === actorId)
-  if (!actor) return
-
-  // Check if already placed
-  if (currentScene.value.actorPlacements.some(p => p.actorId === actorId)) {
-    alert('Actor already placed in this scene')
-    return
-  }
-
-  currentScene.value.actorPlacements.push({
-    id: Date.now(),
-    actorId: actorId,
-    x: 400,
-    y: 600,
-    w: 64,
-    h: 128,
-    rotation: 0,
-    direction: 'south',
-    currentState: 'idle'
-  })
-}
-
-// Remove actor from current scene
-const removeActorFromScene = (placementId) => {
-  const index = currentScene.value.actorPlacements.findIndex(p => p.id === placementId)
-  if (index > -1) {
-    currentScene.value.actorPlacements.splice(index, 1)
-  }
-}
-
-// Get global actor by ID
-const getGlobalActorById = (actorId) => {
-  return project.value.globalData.actors.find(a => a.id === actorId)
-}
 
 // =====================
 // UNDO/REDO SYSTEM
@@ -759,6 +602,60 @@ const {
   defaultHeight: computed(() => currentScene.value?.height || 1200)
 })
 
+// Initialize scene management composable
+const {
+  switchScene,
+  createNewScene,
+  deleteCurrentScene,
+  duplicateCurrentScene,
+  showRenameSceneModal,
+  renameSceneValue,
+  openRenameSceneModal,
+  confirmRenameScene,
+  cancelRenameScene,
+  createEmptyScene,
+  getSceneById
+} = useSceneManagement({
+  project,
+  currentScene,
+  selectedElements,
+  defaultWidth: DEFAULT_WIDTH,
+  defaultHeight: DEFAULT_HEIGHT
+})
+
+// Initialize global actors management composable
+const {
+  addGlobalActor,
+  removeGlobalActor,
+  placeActorInScene,
+  removeActorFromScene,
+  getGlobalActorById
+} = useGlobalActors({
+  project,
+  currentScene
+})
+
+// Initialize puzzle helpers composable
+const {
+  addPuzzleHint,
+  removePuzzleHint,
+  addConditionItem,
+  removeConditionItem,
+  addSequenceStep,
+  removeSequenceStep,
+  toggleCorrectChoice,
+  addResultRemoveItem,
+  removeResultRemoveItem,
+  toggleUseWith
+} = usePuzzleHelpers()
+
+// Initialize interaction system composable
+const {
+  addInteraction,
+  removeInteraction,
+  getVerbById
+} = useInteractionSystem({ project })
+
 // Helper for audio asset lookup (needed by usePlayMode)
 const getAudioAssetById = (audioId) => {
   return project.value?.globalData?.audioAssets?.find(a => a.id === audioId)
@@ -836,6 +733,45 @@ const {
   fadeIn,
   fadeOut,
   changeSceneWithTransition: (sceneId) => changeSceneWithTransition(sceneId)
+})
+
+// Initialize context menu and grouping composable
+const {
+  contextMenu,
+  isElementInGroup,
+  createGroup,
+  ungroupSelected,
+  clearAllGroups,
+  selectGroup,
+  duplicateSelected,
+  deleteSelected,
+  showContextMenu,
+  showElementContextMenu,
+  closeContextMenu,
+  handleGlobalClick,
+  canGroup,
+  selectionInGroup,
+  selectedGroup
+} = useContextMenu({
+  currentScene,
+  selectedElements,
+  getElementGroup,
+  getElementByTypeAndId
+})
+
+// Initialize walkbox resize composable
+const {
+  isDraggingVertex,
+  vertexDragState,
+  getWalkboxCenter,
+  getWalkboxPath,
+  startVertexDrag,
+  addWalkboxVertex,
+  removeWalkboxVertex,
+  cleanup: cleanupWalkboxResize
+} = useWalkboxResize({
+  currentScene,
+  getSceneCoords
 })
 
 // Wrapper functions for enter/exit play mode with cutscene triggers
@@ -3361,260 +3297,6 @@ const deleteSelectedParticle = () => {
 }
 
 // =====================
-// CONTEXT MENU & GROUPS
-// =====================
-
-// Context menu state
-const contextMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0
-})
-
-// Check if element is in a group (uses getElementGroup defined earlier)
-const isElementInGroup = (type, elementId) => {
-  if (!type || elementId === undefined || elementId === null) return false
-  const group = getElementGroup(type, elementId)
-  // Use !! to properly convert to boolean (undefined/null both become false)
-  return !!group
-}
-
-// Create a new group from selected elements
-const createGroup = () => {
-  if (selectedElements.value.length < 2) return
-
-  if (!currentScene.value.groups) {
-    currentScene.value.groups = []
-  }
-
-  const newGroup = {
-    id: 'group-' + Date.now(),
-    name: 'New Group',
-    members: selectedElements.value.map(sel => ({
-      type: sel.type,
-      id: sel.element.id
-    })),
-    locked: false
-  }
-
-  currentScene.value.groups.push(newGroup)
-  closeContextMenu()
-}
-
-// Ungroup selected elements - removes ALL groups containing any selected element
-const ungroupSelected = () => {
-  if (selectedElements.value.length === 0) return
-  if (!currentScene.value.groups) return
-
-  // Find all groups that contain any of the selected elements
-  const groupsToRemove = new Set()
-  selectedElements.value.forEach(sel => {
-    const group = getElementGroup(sel.type, sel.element.id)
-    if (group) {
-      groupsToRemove.add(group.id)
-    }
-  })
-
-  // Remove those groups
-  currentScene.value.groups = currentScene.value.groups.filter(g => !groupsToRemove.has(g.id))
-  closeContextMenu()
-}
-
-// Clear ALL groups in the current scene
-const clearAllGroups = () => {
-  currentScene.value.groups = []
-  closeContextMenu()
-}
-
-// Select all elements in the same group
-const selectGroup = () => {
-  if (selectedElements.value.length === 0) return
-
-  const firstSelected = selectedElements.value[0]
-  const group = getElementGroup(firstSelected.type, firstSelected.element.id)
-
-  if (group) {
-    const newSelection = []
-
-    group.members.forEach(member => {
-      const element = getElementByTypeAndId(member.type, member.id)
-      if (element) {
-        newSelection.push({ type: member.type, element })
-      }
-    })
-
-    selectedElements.value = newSelection
-  }
-  closeContextMenu()
-}
-
-// Duplicate selected elements (uses getElementByTypeAndId defined earlier)
-const duplicateSelected = () => {
-  if (selectedElements.value.length === 0) return
-
-  const newSelection = []
-  const offset = 20
-
-  selectedElements.value.forEach(sel => {
-    const original = sel.element
-    const newId = Date.now() + Math.random()
-
-    // Deep clone the element
-    const duplicate = JSON.parse(JSON.stringify(original))
-    duplicate.id = newId
-    duplicate.name = (original.name || sel.type) + ' (copy)'
-
-    // Offset position
-    if (duplicate.x !== undefined) duplicate.x += offset
-    if (duplicate.y !== undefined) duplicate.y += offset
-    if (duplicate.points) {
-      duplicate.points = duplicate.points.map(p => ({ x: p.x + offset, y: p.y + offset }))
-    }
-
-    // Add to appropriate array
-    switch (sel.type) {
-      case 'image': currentScene.value.images.push(duplicate); break
-      case 'walkbox': currentScene.value.walkboxes.push(duplicate); break
-      case 'exit': currentScene.value.exits.push(duplicate); break
-      case 'actor': currentScene.value.actorPlacements.push(duplicate); break
-      case 'hotspot': currentScene.value.hotspots.push(duplicate); break
-      case 'zplane': currentScene.value.zplanes.push(duplicate); break
-      case 'light': currentScene.value.lighting.lights.push(duplicate); break
-      case 'particle': currentScene.value.particles.push(duplicate); break
-    }
-
-    newSelection.push({ type: sel.type, element: duplicate })
-  })
-
-  selectedElements.value = newSelection
-  closeContextMenu()
-}
-
-// Delete selected elements
-const deleteSelected = () => {
-  selectedElements.value.forEach(sel => {
-    switch (sel.type) {
-      case 'image':
-        const imgIdx = currentScene.value.images.findIndex(e => e.id === sel.element.id)
-        if (imgIdx > -1) currentScene.value.images.splice(imgIdx, 1)
-        break
-      case 'walkbox':
-        const wbIdx = currentScene.value.walkboxes.findIndex(e => e.id === sel.element.id)
-        if (wbIdx > -1) currentScene.value.walkboxes.splice(wbIdx, 1)
-        break
-      case 'exit':
-        const exIdx = currentScene.value.exits.findIndex(e => e.id === sel.element.id)
-        if (exIdx > -1) currentScene.value.exits.splice(exIdx, 1)
-        break
-      case 'actor':
-        const acIdx = currentScene.value.actorPlacements.findIndex(e => e.id === sel.element.id)
-        if (acIdx > -1) currentScene.value.actorPlacements.splice(acIdx, 1)
-        break
-      case 'hotspot':
-        const hsIdx = currentScene.value.hotspots.findIndex(e => e.id === sel.element.id)
-        if (hsIdx > -1) currentScene.value.hotspots.splice(hsIdx, 1)
-        break
-      case 'zplane':
-        const zpIdx = currentScene.value.zplanes.findIndex(e => e.id === sel.element.id)
-        if (zpIdx > -1) currentScene.value.zplanes.splice(zpIdx, 1)
-        break
-      case 'light':
-        const ltIdx = currentScene.value.lighting.lights.findIndex(e => e.id === sel.element.id)
-        if (ltIdx > -1) currentScene.value.lighting.lights.splice(ltIdx, 1)
-        break
-      case 'particle':
-        const ptIdx = currentScene.value.particles.findIndex(e => e.id === sel.element.id)
-        if (ptIdx > -1) currentScene.value.particles.splice(ptIdx, 1)
-        break
-    }
-
-    // Also remove from any group
-    if (currentScene.value.groups) {
-      currentScene.value.groups.forEach(group => {
-        const memberIdx = group.members.findIndex(m => m.type === sel.type && m.id === sel.element.id)
-        if (memberIdx > -1) group.members.splice(memberIdx, 1)
-      })
-      // Clean up empty groups
-      currentScene.value.groups = currentScene.value.groups.filter(g => g.members.length > 0)
-    }
-  })
-
-  selectedElements.value = []
-  closeContextMenu()
-}
-
-// Show context menu
-const showContextMenu = (event) => {
-  event.preventDefault()
-
-  // Only show context menu if there are selected elements
-  if (selectedElements.value.length === 0) return
-
-  contextMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY
-  }
-}
-
-// Show context menu for a specific element (right-click on element)
-const showElementContextMenu = (event, type, element) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  // If the element is not selected, select it (replacing current selection)
-  const isSelected = selectedElements.value.some(
-    s => s.type === type && s.element.id === element.id
-  )
-
-  if (!isSelected) {
-    // If Ctrl/Cmd is held, add to selection instead of replacing
-    if (event.ctrlKey || event.metaKey) {
-      selectedElements.value = [...selectedElements.value, { type, element }]
-    } else {
-      selectedElements.value = [{ type, element }]
-    }
-  }
-
-  contextMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY
-  }
-}
-
-// Close context menu
-const closeContextMenu = () => {
-  contextMenu.value.visible = false
-}
-
-// Handle click outside to close context menu
-const handleGlobalClick = (event) => {
-  if (contextMenu.value.visible) {
-    closeContextMenu()
-  }
-}
-
-// Check if current selection can be grouped
-const canGroup = computed(() => {
-  return selectedElements.value.length >= 2
-})
-
-// Check if current selection is in a group
-const selectionInGroup = computed(() => {
-  if (selectedElements.value.length === 0) return false
-  const first = selectedElements.value[0]
-  return isElementInGroup(first.type, first.element.id)
-})
-
-// Get the group of current selection
-const selectedGroup = computed(() => {
-  if (selectedElements.value.length === 0) return null
-  const first = selectedElements.value[0]
-  return getElementGroup(first.type, first.element.id)
-})
-
-// =====================
 // PARALLAX SYSTEM
 // =====================
 
@@ -3752,65 +3434,6 @@ const getAllSceneObjects = computed(() => {
   return objects
 })
 
-// Puzzle helper functions
-const addPuzzleHint = (puzzle) => {
-  if (!puzzle.hints) puzzle.hints = []
-  puzzle.hints.push({ afterAttempts: puzzle.hints.length + 1, text: '' })
-}
-
-const removePuzzleHint = (puzzle, index) => {
-  puzzle.hints.splice(index, 1)
-}
-
-const addConditionItem = (puzzle) => {
-  if (!puzzle.conditions.items) puzzle.conditions.items = []
-  puzzle.conditions.items.push(null)
-}
-
-const removeConditionItem = (puzzle, index) => {
-  puzzle.conditions.items.splice(index, 1)
-}
-
-const addSequenceStep = (puzzle) => {
-  if (!puzzle.conditions.sequence) puzzle.conditions.sequence = []
-  puzzle.conditions.sequence.push('')
-}
-
-const removeSequenceStep = (puzzle, index) => {
-  puzzle.conditions.sequence.splice(index, 1)
-}
-
-const addResultRemoveItem = (puzzle) => {
-  if (!puzzle.result.removeItems) puzzle.result.removeItems = []
-  puzzle.result.removeItems.push(null)
-}
-
-const removeResultRemoveItem = (puzzle, index) => {
-  puzzle.result.removeItems.splice(index, 1)
-}
-
-// Toggle item useWith types
-const toggleUseWith = (item, type) => {
-  if (!item.useWith) item.useWith = []
-  const index = item.useWith.indexOf(type)
-  if (index > -1) {
-    item.useWith.splice(index, 1)
-  } else {
-    item.useWith.push(type)
-  }
-}
-
-// Toggle correct choice for dialog puzzles
-const toggleCorrectChoice = (puzzle, choiceId) => {
-  if (!puzzle.conditions.correctChoices) puzzle.conditions.correctChoices = []
-  const index = puzzle.conditions.correctChoices.indexOf(choiceId)
-  if (index > -1) {
-    puzzle.conditions.correctChoices.splice(index, 1)
-  } else {
-    puzzle.conditions.correctChoices.push(choiceId)
-  }
-}
-
 // Actor animation preview interval
 let actorPreviewInterval = null
 
@@ -3843,151 +3466,6 @@ const stopActorAnimationPreview = () => {
     clearInterval(actorPreviewInterval)
     actorPreviewInterval = null
   }
-}
-
-// =====================
-// WALKBOX RESIZE SYSTEM
-// =====================
-
-// Get center point of walkbox for label positioning
-const getWalkboxCenter = (wb) => {
-  const sumX = wb.points.reduce((sum, p) => sum + p.x, 0)
-  const sumY = wb.points.reduce((sum, p) => sum + p.y, 0)
-  return {
-    x: sumX / wb.points.length,
-    y: sumY / wb.points.length
-  }
-}
-
-// Vertex drag state
-const isDraggingVertex = ref(false)
-const vertexDragState = ref({
-  walkbox: null,
-  vertexIndex: null,
-  startX: 0,
-  startY: 0,
-  originalX: 0,
-  originalY: 0
-})
-
-// Start dragging a vertex
-const startVertexDrag = (event, walkbox, vertexIndex) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  isDraggingVertex.value = true
-  const coords = getSceneCoords(event)
-  const point = walkbox.points[vertexIndex]
-
-  vertexDragState.value = {
-    walkbox,
-    vertexIndex,
-    startX: coords.x,
-    startY: coords.y,
-    originalX: point.x,
-    originalY: point.y
-  }
-
-  document.addEventListener('mousemove', onVertexDragMove)
-  document.addEventListener('mouseup', onVertexDragEnd)
-}
-
-// Handle vertex drag movement
-const onVertexDragMove = (event) => {
-  if (!isDraggingVertex.value || !vertexDragState.value.walkbox) return
-
-  const coords = getSceneCoords(event)
-  const dx = coords.x - vertexDragState.value.startX
-  const dy = coords.y - vertexDragState.value.startY
-
-  const newX = Math.max(0, Math.min(currentScene.value.width, vertexDragState.value.originalX + dx))
-  const newY = Math.max(0, Math.min(currentScene.value.height, vertexDragState.value.originalY + dy))
-
-  vertexDragState.value.walkbox.points[vertexDragState.value.vertexIndex].x = newX
-  vertexDragState.value.walkbox.points[vertexDragState.value.vertexIndex].y = newY
-}
-
-// End vertex dragging
-const onVertexDragEnd = () => {
-  isDraggingVertex.value = false
-  vertexDragState.value = {
-    walkbox: null,
-    vertexIndex: null,
-    startX: 0,
-    startY: 0,
-    originalX: 0,
-    originalY: 0
-  }
-
-  document.removeEventListener('mousemove', onVertexDragMove)
-  document.removeEventListener('mouseup', onVertexDragEnd)
-}
-
-// Add a new vertex on an edge
-const addWalkboxVertex = (walkbox, edgeIndex, event) => {
-  event.preventDefault()
-  event.stopPropagation()
-
-  // Get the two points of this edge
-  const p1 = walkbox.points[edgeIndex]
-  const p2 = walkbox.points[(edgeIndex + 1) % walkbox.points.length]
-
-  // Calculate midpoint of the edge (more reliable than mouse position)
-  const midX = Math.round((p1.x + p2.x) / 2)
-  const midY = Math.round((p1.y + p2.y) / 2)
-
-  // Insert new point after edgeIndex
-  walkbox.points.splice(edgeIndex + 1, 0, {
-    x: midX,
-    y: midY
-  })
-
-  console.log(`[Walkbox] Added vertex at (${midX}, ${midY}) on edge ${edgeIndex}`)
-}
-
-// Remove a vertex (minimum 3 vertices required)
-const removeWalkboxVertex = (walkbox, vertexIndex) => {
-  if (walkbox.points.length <= 3) return
-
-  walkbox.points.splice(vertexIndex, 1)
-}
-
-// =====================
-// INTERACTION SYSTEM
-// =====================
-
-// Add a new interaction to an element (hotspot, image)
-const addInteraction = (element) => {
-  if (!element.interactions) {
-    element.interactions = []
-  }
-
-  element.interactions.push({
-    verbId: null,
-    action: 'dialog',
-    params: {
-      text: '',
-      actorId: null
-    },
-    hasCondition: false,
-    condition: {
-      varName: '',
-      operator: '==',
-      value: ''
-    }
-  })
-}
-
-// Remove an interaction from an element
-const removeInteraction = (element, index) => {
-  if (element.interactions && element.interactions.length > index) {
-    element.interactions.splice(index, 1)
-  }
-}
-
-// Get verb by ID
-const getVerbById = (verbId) => {
-  return project.value.globalData.verbs.find(v => v.id === verbId)
 }
 
 // Canvas click handler (deselect when clicking empty area)

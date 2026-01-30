@@ -42,3 +42,11 @@ export { useAudioPlayback } from './useAudioPlayback'
 // Play mode composables
 export { usePlayMode } from './usePlayMode'
 export { useCutsceneEngine } from './useCutsceneEngine'
+
+// UI composables
+export { useContextMenu } from './useContextMenu'
+export { useWalkboxResize } from './useWalkboxResize'
+export { useSceneManagement } from './useSceneManagement'
+export { useGlobalActors, DEFAULT_ACTOR_ANIMATIONS } from './useGlobalActors'
+export { usePuzzleHelpers } from './usePuzzleHelpers'
+export { useInteractionSystem, INTERACTION_ACTIONS, CONDITION_OPERATORS } from './useInteractionSystem'
