@@ -66,7 +66,10 @@ import {
   AudioProperties,
   InteractionsPanel,
   ImageProperties,
-  AiAssistantModal
+  AiAssistantModal,
+  ActorProperties,
+  ExitProperties,
+  SceneSettingsPanel
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -4783,75 +4786,17 @@ onUnmounted(() => {
 
         <div class="panel-content pixel-scrollbar">
           <!-- Scene settings (when nothing selected) -->
-          <div v-if="selectedElements.length === 0" class="scene-settings">
-            <div class="property-header">
-              <span class="property-type">🎬 SCENE</span>
-            </div>
-            <div class="property-group">
-              <label class="property-label">Name</label>
-              <input
-                v-model="currentScene.name"
-                type="text"
-                class="property-input"
-              />
-            </div>
-            <div class="property-group">
-              <label class="property-label">Size</label>
-              <div class="property-row">
-                <input
-                  v-model.number="currentScene.width"
-                  type="number"
-                  class="property-input small"
-                  placeholder="Width"
-                />
-                <span class="property-unit">×</span>
-                <input
-                  v-model.number="currentScene.height"
-                  type="number"
-                  class="property-input small"
-                  placeholder="Height"
-                />
-              </div>
-            </div>
-            <div class="property-group">
-              <label class="property-label">Background</label>
-              <div class="asset-selector">
-                <select
-                  v-model="currentScene.background"
-                  class="property-select"
-                  @change="autoSaveProject"
-                >
-                  <option :value="null">-- No background --</option>
-                  <option
-                    v-for="asset in project.globalData.assets"
-                    :key="asset.id"
-                    :value="asset.id"
-                  >
-                    {{ asset.name }} ({{ asset.width }}×{{ asset.height }})
-                  </option>
-                </select>
-                <div
-                  v-if="currentScene.background && getAssetById(currentScene.background)"
-                  class="asset-preview-small"
-                  :style="{ backgroundImage: getAssetDisplayUrl(getAssetById(currentScene.background)) ? `url(${getAssetDisplayUrl(getAssetById(currentScene.background))})` : 'none' }"
-                ></div>
-              </div>
-              <!-- Scale to canvas button -->
-              <div v-if="backgroundNeedsScaling" class="background-scale-hint">
-                <span class="size-mismatch-text">
-                  ⚠️ {{ currentBackgroundAsset?.width }}×{{ currentBackgroundAsset?.height }} ≠ {{ currentScene.width }}×{{ currentScene.height }}
-                </span>
-                <button
-                  class="scale-background-btn"
-                  @click="showBackgroundScaleModal = true"
-                  title="Ajustar imagen al tamaño del canvas"
-                >
-                  📐 Ajustar al Canvas
-                </button>
-              </div>
-            </div>
-            <p class="pixel-font-sm text-muted hint-text">Select an element to edit its properties</p>
-          </div>
+          <SceneSettingsPanel
+            v-if="selectedElements.length === 0"
+            :scene="currentScene"
+            :assets="project.globalData.assets"
+            :background-asset="currentBackgroundAsset"
+            :background-needs-scaling="backgroundNeedsScaling"
+            :get-asset-by-id="getAssetById"
+            :get-asset-display-url="getAssetDisplayUrl"
+            @auto-save="autoSaveProject"
+            @show-scale-modal="showBackgroundScaleModal = true"
+          />
 
           <!-- Multiple elements selected -->
           <div v-else-if="selectedElements.length > 1" class="properties-form">
@@ -4955,77 +4900,20 @@ onUnmounted(() => {
               @ensure-parallax-defaults="ensureParallaxDefaults"
             />
             <!-- Exit-specific properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'exit'">
-              <label class="property-label">Target Scene</label>
-              <select
-                v-model="selectedElements[0].element.targetScene"
-                class="property-select"
-              >
-                <option value="">-- Select scene --</option>
-                <option
-                  v-for="scene in availableScenes.filter(s => s.id !== currentScene.id)"
-                  :key="scene.id"
-                  :value="scene.id"
-                >
-                  {{ scene.name }} ({{ scene.id }})
-                </option>
-              </select>
-            </div>
+            <ExitProperties
+              v-if="selectedElements[0].type === 'exit'"
+              :element="selectedElements[0].element"
+              :scenes="availableScenes"
+              :current-scene-id="currentScene.id"
+            />
+
             <!-- Actor-specific properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'actor'">
-              <label class="property-label">Direction</label>
-              <select v-model="selectedElements[0].element.direction" class="property-input">
-                <option value="north">North</option>
-                <option value="south">South</option>
-                <option value="east">East</option>
-                <option value="west">West</option>
-              </select>
-            </div>
-            <!-- Actor Animations -->
-            <div class="property-group" v-if="selectedElements[0].type === 'actor' && selectedElements[0].element.animations">
-              <label class="property-label">Animations</label>
-              <div class="actor-animations-config">
-                <div class="animation-preview-state">
-                  <span class="animation-label">Preview State:</span>
-                  <select v-model="selectedElements[0].element.currentState" class="property-select-sm">
-                    <option v-for="state in actorAnimationStates" :key="state.key" :value="state.key">
-                      {{ state.icon }} {{ state.label }}
-                    </option>
-                  </select>
-                </div>
-                <div class="animation-assignments">
-                  <div
-                    v-for="state in actorAnimationStates"
-                    :key="state.key"
-                    class="animation-assignment-row"
-                  >
-                    <span class="animation-state-name">{{ state.icon }} {{ state.label }}:</span>
-                    <select
-                      v-model="selectedElements[0].element.animations[state.key]"
-                      class="property-select-sm"
-                    >
-                      <option :value="null">-- Ninguna --</option>
-                      <option
-                        v-for="anim in globalAnimations"
-                        :key="anim.id"
-                        :value="anim.id"
-                      >
-                        {{ anim.name }}
-                      </option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- Image-specific properties -->
-            <div class="property-group" v-if="selectedElements[0].type === 'image'">
-              <label class="property-label">Z-Order</label>
-              <input
-                v-model.number="selectedElements[0].element.zOrder"
-                type="number"
-                class="property-input"
-              />
-            </div>
+            <ActorProperties
+              v-if="selectedElements[0].type === 'actor'"
+              :element="selectedElements[0].element"
+              :actor-animation-states="actorAnimationStates"
+              :global-animations="globalAnimations"
+            />
 
             <!-- Interactions Panel (for hotspots and interactive images) -->
             <InteractionsPanel

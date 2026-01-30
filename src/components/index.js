@@ -57,6 +57,9 @@ export { default as DialogProperties } from './properties/DialogProperties.vue'
 export { default as AudioProperties } from './properties/AudioProperties.vue'
 export { default as InteractionsPanel } from './properties/InteractionsPanel.vue'
 export { default as ImageProperties } from './properties/ImageProperties.vue'
+export { default as ActorProperties } from './properties/ActorProperties.vue'
+export { default as ExitProperties } from './properties/ExitProperties.vue'
+export { default as SceneSettingsPanel } from './properties/SceneSettingsPanel.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
