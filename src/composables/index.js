@@ -1,0 +1,35 @@
+/**
+ * Composables de Pixel-Forge
+ *
+ * Exporta todos los composables disponibles para uso en la aplicación.
+ *
+ * @example
+ * import {
+ *   useUndoRedo,
+ *   useKeyboardShortcuts,
+ *   useElementSelection
+ * } from '@/composables'
+ */
+
+// API composables
+export { useClaudeSocket } from './useClaudeSocket'
+export { useProjectApi } from './useProjectApi'
+export { useAssetApi } from './useAssetApi'
+
+// Editor core composables (Phase 1 refactoring)
+export { useUndoRedo } from './useUndoRedo'
+export { useKeyboardShortcuts, createEditorShortcuts } from './useKeyboardShortcuts'
+export { useElementSelection } from './useElementSelection'
+export { useElementCRUD } from './useElementCRUD'
+export { useCanvasZoom } from './useCanvasZoom'
+export { usePanelState } from './usePanelState'
+export {
+  useSceneEditor,
+  ensureSceneStructure,
+  ensureGlobalDataStructure,
+  createEmptyScene,
+  createEmptyProject,
+  DEFAULT_WIDTH,
+  DEFAULT_HEIGHT,
+  DEFAULT_VERBS
+} from './useSceneEditor'

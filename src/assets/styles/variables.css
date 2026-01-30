@@ -1,0 +1,56 @@
+/* Pixel-Forge CSS Variables */
+:root {
+  /* Backgrounds */
+  --bg-dark: #0f0f23;
+  --bg-medium: #1a1a2e;
+  --bg-light: #16213e;
+  --bg-card: #1e1e3f;
+
+  /* Primary (Gold) */
+  --primary: #c9a227;
+  --primary-light: #f4d03f;
+  --primary-dark: #9a7b0a;
+
+  /* Accent (Cyan retro) */
+  --accent: #00d4ff;
+  --accent-light: #7fefff;
+  --accent-dark: #0099cc;
+
+  /* Text */
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+
+  /* Status */
+  --success: #00ff88;
+  --warning: #ffaa00;
+  --error: #ff4757;
+
+  /* Element colors (por tipo) */
+  --color-object: #c9a227;
+  --color-walkbox: #00ff88;
+  --color-exit: #ff6b6b;
+  --color-actor: #a855f7;
+  --color-hotspot: #00d4ff;
+  --color-image: #f472b6;
+  --color-zplane: #64748b;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Border */
+  --border-width: 4px;
+  --border-radius: 0;
+
+  /* Shadows (pixel-style) */
+  --shadow-pixel: 4px 4px 0 0 rgba(0, 0, 0, 0.5);
+  --shadow-pixel-sm: 2px 2px 0 0 rgba(0, 0, 0, 0.5);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+}
