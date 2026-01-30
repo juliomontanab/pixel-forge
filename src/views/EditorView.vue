@@ -58,7 +58,12 @@ import {
   InventorySection,
   VerbsSection,
   PuzzleProperties,
-  CutsceneProperties
+  CutsceneProperties,
+  LightProperties,
+  ParticleProperties,
+  ItemProperties,
+  DialogProperties,
+  AudioProperties
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -5362,67 +5367,16 @@ onUnmounted(() => {
             </div>
 
             <!-- Dialog properties -->
-            <template v-if="selectedElements[0].type === 'dialog'">
-              <div class="property-group">
-                <label class="property-label">Actor</label>
-                <select
-                  v-model="selectedElements[0].element.actor"
-                  class="property-input"
-                >
-                  <option :value="null">-- No Actor (Narrator) --</option>
-                  <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.id">
-                    {{ actor.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.actor">
-                <label class="property-label">Actor Preview</label>
-                <div class="dialog-actor-preview">
-                  <div
-                    v-if="getActorById(selectedElements[0].element.actor)"
-                    class="actor-preview-box"
-                    :style="getDialogActorPreviewStyle(selectedElements[0].element.actor)"
-                  >
-                    <span v-if="!hasActorAnimation(selectedElements[0].element.actor)" class="actor-preview-name">
-                      {{ getActorById(selectedElements[0].element.actor)?.name }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Lines ({{ selectedElements[0].element.lines?.length || 0 }})</label>
-                <div class="dialog-lines">
-                  <div v-for="(line, idx) in selectedElements[0].element.lines" :key="line.id || idx" class="dialog-line">
-                    <select v-model="line.speaker" class="property-input tiny">
-                      <option value="">-- Speaker --</option>
-                      <option value="Narrator">Narrator</option>
-                      <option v-for="actor in project.globalData.actors" :key="actor.id" :value="actor.name">
-                        {{ actor.name }}
-                      </option>
-                    </select>
-                    <input v-model="line.text" type="text" class="property-input" placeholder="Text" />
-                    <button class="remove-line-btn" @click="removeDialogLine(selectedElements[0].element, idx)" title="Remove line">×</button>
-                  </div>
-                </div>
-                <button class="add-line-btn" @click="selectedElements[0].element.lines.push({ id: Date.now(), speaker: '', text: '' })">+ Add Line</button>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Choices</label>
-                <div class="dialog-choices">
-                  <div v-for="(choice, idx) in selectedElements[0].element.choices" :key="choice.id || idx" class="dialog-choice">
-                    <input v-model="choice.text" type="text" class="property-input" placeholder="Choice text" />
-                    <select v-model="choice.targetDialog" class="property-input tiny">
-                      <option :value="null">-- Target --</option>
-                      <option v-for="dialog in currentScene.dialogs" :key="dialog.id" :value="dialog.id">
-                        {{ dialog.name }}
-                      </option>
-                    </select>
-                    <button class="remove-line-btn" @click="removeDialogChoice(selectedElements[0].element, idx)" title="Remove choice">×</button>
-                  </div>
-                </div>
-                <button class="add-line-btn" @click="addDialogChoice(selectedElements[0].element)">+ Add Choice</button>
-              </div>
-            </template>
+            <!-- Dialog properties -->
+            <DialogProperties
+              v-if="selectedElements[0].type === 'dialog'"
+              :element="selectedElements[0].element"
+              :actors="project.globalData.actors"
+              :dialogs="currentScene.dialogs"
+              :get-actor-by-id="getActorById"
+              :get-dialog-actor-preview-style="getDialogActorPreviewStyle"
+              :has-actor-animation="hasActorAnimation"
+            />
 
             <!-- Puzzle properties -->
             <PuzzleProperties
@@ -5439,98 +5393,15 @@ onUnmounted(() => {
             />
 
             <!-- Item properties -->
-            <template v-if="selectedElements[0].type === 'item'">
-              <div class="property-group">
-                <label class="property-label">Description</label>
-                <textarea
-                  v-model="selectedElements[0].element.description"
-                  class="property-input property-textarea"
-                  placeholder="Item description..."
-                ></textarea>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Icon (Emoji)</label>
-                <input
-                  v-model="selectedElements[0].element.icon"
-                  type="text"
-                  class="property-input"
-                  placeholder="Emoji (e.g., 🔑)"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Icon (Image Asset)</label>
-                <div class="asset-selector">
-                  <select
-                    v-model="selectedElements[0].element.iconAssetId"
-                    class="property-select"
-                  >
-                    <option :value="null">-- Use emoji --</option>
-                    <option
-                      v-for="asset in project.globalData.assets"
-                      :key="asset.id"
-                      :value="asset.id"
-                    >
-                      {{ asset.name }}
-                    </option>
-                  </select>
-                  <div
-                    v-if="selectedElements[0].element.iconAssetId && getAssetById(selectedElements[0].element.iconAssetId)"
-                    class="asset-preview-small"
-                    :style="{ backgroundImage: getAssetDisplayUrl(getAssetById(selectedElements[0].element.iconAssetId)) ? `url(${getAssetDisplayUrl(getAssetById(selectedElements[0].element.iconAssetId))})` : 'none' }"
-                  ></div>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.combinable" />
-                  Can be combined with other items
-                </label>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Can be used on</label>
-                <div class="use-with-checkboxes">
-                  <label>
-                    <input type="checkbox" :checked="(selectedElements[0].element.useWith || []).includes('hotspot')" @change="toggleUseWith(selectedElements[0].element, 'hotspot')" />
-                    Hotspots
-                  </label>
-                  <label>
-                    <input type="checkbox" :checked="(selectedElements[0].element.useWith || []).includes('actor')" @change="toggleUseWith(selectedElements[0].element, 'actor')" />
-                    Actors
-                  </label>
-                  <label>
-                    <input type="checkbox" :checked="(selectedElements[0].element.useWith || []).includes('exit')" @change="toggleUseWith(selectedElements[0].element, 'exit')" />
-                    Exits
-                  </label>
-                  <label>
-                    <input type="checkbox" :checked="(selectedElements[0].element.useWith || []).includes('image')" @change="toggleUseWith(selectedElements[0].element, 'image')" />
-                    Images
-                  </label>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Pickup Dialog</label>
-                <select v-model="selectedElements[0].element.pickupDialog" class="property-input">
-                  <option :value="null">-- None --</option>
-                  <option v-for="dialog in currentScene.dialogs" :key="dialog.id" :value="dialog.id">
-                    {{ dialog.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Examine Dialog</label>
-                <select v-model="selectedElements[0].element.examineDialog" class="property-input">
-                  <option :value="null">-- None --</option>
-                  <option v-for="dialog in currentScene.dialogs" :key="dialog.id" :value="dialog.id">
-                    {{ dialog.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-group">
-                <button class="action-btn" @click="addToInventory(selectedElements[0].element.id)">
-                  Add to Inventory
-                </button>
-              </div>
-            </template>
+            <ItemProperties
+              v-if="selectedElements[0].type === 'item'"
+              :element="selectedElements[0].element"
+              :assets="project.globalData.assets"
+              :dialogs="currentScene.dialogs"
+              :get-asset-by-id="getAssetById"
+              :get-asset-display-url="getAssetDisplayUrl"
+              @add-to-inventory="addToInventory"
+            />
 
             <!-- Verb properties -->
             <template v-if="selectedElements[0].type === 'verb'">
@@ -5556,123 +5427,30 @@ onUnmounted(() => {
             </template>
 
             <!-- SFX properties -->
-            <template v-if="selectedElements[0].type === 'sfx'">
-              <div class="property-group">
-                <label class="property-label">Audio File</label>
-                <div class="audio-selector">
-                  <select
-                    v-model="selectedElements[0].element.audioAssetId"
-                    class="property-select"
-                  >
-                    <option :value="null">-- Select audio --</option>
-                    <option
-                      v-for="audio in project.globalData.audioAssets.filter(a => a.type === 'sfx')"
-                      :key="audio.id"
-                      :value="audio.id"
-                    >
-                      {{ audio.name }} ({{ formatDuration(audio.duration) }})
-                    </option>
-                  </select>
-                  <button
-                    v-if="selectedElements[0].element.audioAssetId && getAudioAssetById(selectedElements[0].element.audioAssetId)"
-                    class="audio-preview-btn"
-                    @click="currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? stopAudioPreview() : playAudioPreview(getAudioAssetById(selectedElements[0].element.audioAssetId))"
-                    :title="currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? 'Stop' : 'Preview'"
-                  >
-                    {{ currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? '⏹' : '▶' }}
-                  </button>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Volume ({{ selectedElements[0].element.volume }}%)</label>
-                <input
-                  v-model.number="selectedElements[0].element.volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="property-slider"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Trigger</label>
-                <select v-model="selectedElements[0].element.trigger" class="property-input">
-                  <option value="manual">Manual</option>
-                  <option value="enter">On Room Enter</option>
-                  <option value="action">On Action</option>
-                  <option value="dialog">On Dialog</option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.loop" />
-                  Loop
-                </label>
-              </div>
-            </template>
+            <AudioProperties
+              v-if="selectedElements[0].type === 'sfx'"
+              :element="selectedElements[0].element"
+              type="sfx"
+              :audio-assets="project.globalData.audioAssets"
+              :currently-playing-audio="currentlyPlayingAudio"
+              :format-duration="formatDuration"
+              :get-audio-asset-by-id="getAudioAssetById"
+              @play="playAudioPreview"
+              @stop="stopAudioPreview"
+            />
 
             <!-- Music properties -->
-            <template v-if="selectedElements[0].type === 'music'">
-              <div class="property-group">
-                <label class="property-label">Audio File</label>
-                <div class="audio-selector">
-                  <select
-                    v-model="selectedElements[0].element.audioAssetId"
-                    class="property-select"
-                  >
-                    <option :value="null">-- Select audio --</option>
-                    <option
-                      v-for="audio in project.globalData.audioAssets.filter(a => a.type === 'music')"
-                      :key="audio.id"
-                      :value="audio.id"
-                    >
-                      {{ audio.name }} ({{ formatDuration(audio.duration) }})
-                    </option>
-                  </select>
-                  <button
-                    v-if="selectedElements[0].element.audioAssetId && getAudioAssetById(selectedElements[0].element.audioAssetId)"
-                    class="audio-preview-btn"
-                    @click="currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? stopAudioPreview() : playAudioPreview(getAudioAssetById(selectedElements[0].element.audioAssetId))"
-                    :title="currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? 'Stop' : 'Preview'"
-                  >
-                    {{ currentlyPlayingAudio?.id === selectedElements[0].element.audioAssetId ? '⏹' : '▶' }}
-                  </button>
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Volume ({{ selectedElements[0].element.volume }}%)</label>
-                <input
-                  v-model.number="selectedElements[0].element.volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="property-slider"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Fade In (ms)</label>
-                <input
-                  v-model.number="selectedElements[0].element.fadeIn"
-                  type="number"
-                  class="property-input"
-                  min="0"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Fade Out (ms)</label>
-                <input
-                  v-model.number="selectedElements[0].element.fadeOut"
-                  type="number"
-                  class="property-input"
-                  min="0"
-                />
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.loop" />
-                  Loop
-                </label>
-              </div>
-            </template>
+            <AudioProperties
+              v-if="selectedElements[0].type === 'music'"
+              :element="selectedElements[0].element"
+              type="music"
+              :audio-assets="project.globalData.audioAssets"
+              :currently-playing-audio="currentlyPlayingAudio"
+              :format-duration="formatDuration"
+              :get-audio-asset-by-id="getAudioAssetById"
+              @play="playAudioPreview"
+              @stop="stopAudioPreview"
+            />
 
             <!-- Cutscene properties -->
             <CutsceneProperties
@@ -5688,214 +5466,21 @@ onUnmounted(() => {
             />
 
             <!-- Light properties -->
-            <template v-if="selectedElements[0].type === 'light'">
-              <div class="property-group">
-                <label class="property-label">Name</label>
-                <input v-model="selectedElements[0].element.name" type="text" class="property-input" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Type</label>
-                <select v-model="selectedElements[0].element.type" class="property-select">
-                  <option v-for="lt in lightTypes" :key="lt.id" :value="lt.id">
-                    {{ lt.icon }} {{ lt.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Color</label>
-                <input v-model="selectedElements[0].element.color" type="color" class="property-color" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Position</label>
-                <div class="property-row">
-                  <label class="property-sublabel">X</label>
-                  <input v-model.number="selectedElements[0].element.x" type="number" class="property-input-sm" />
-                  <label class="property-sublabel">Y</label>
-                  <input v-model.number="selectedElements[0].element.y" type="number" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Intensity</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  v-model.number="selectedElements[0].element.intensity"
-                  class="property-range"
-                />
-                <span class="property-value">{{ selectedElements[0].element.intensity.toFixed(1) }}</span>
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.type === 'point' || selectedElements[0].element.type === 'spot'">
-                <label class="property-label">Radius</label>
-                <input v-model.number="selectedElements[0].element.radius" type="number" min="10" class="property-input" />
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.type === 'spot'">
-                <label class="property-label">Cone Angle</label>
-                <input v-model.number="selectedElements[0].element.angle" type="number" min="1" max="180" class="property-input" />
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.type === 'spot' || selectedElements[0].element.type === 'directional'">
-                <label class="property-label">Direction (deg)</label>
-                <input v-model.number="selectedElements[0].element.direction" type="number" min="0" max="360" class="property-input" />
-              </div>
-              <div class="property-group" v-if="selectedElements[0].element.type === 'area'">
-                <label class="property-label">Size</label>
-                <div class="property-row">
-                  <label class="property-sublabel">W</label>
-                  <input v-model.number="selectedElements[0].element.width" type="number" min="10" class="property-input-sm" />
-                  <label class="property-sublabel">H</label>
-                  <input v-model.number="selectedElements[0].element.height" type="number" min="10" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Falloff</label>
-                <select v-model="selectedElements[0].element.falloff" class="property-select">
-                  <option value="none">None</option>
-                  <option value="linear">Linear</option>
-                  <option value="smooth">Smooth</option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.enabled" />
-                  Enabled
-                </label>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.castShadows" />
-                  Cast Shadows
-                </label>
-              </div>
-              <button class="delete-btn" @click="deleteSelectedLight">🗑 Delete Light</button>
-            </template>
+            <LightProperties
+              v-if="selectedElements[0].type === 'light'"
+              :element="selectedElements[0].element"
+              :light-types="lightTypes"
+              @delete="deleteSelectedLight"
+            />
 
             <!-- Particle emitter properties -->
-            <template v-if="selectedElements[0].type === 'particle'">
-              <div class="property-group">
-                <label class="property-label">Name</label>
-                <input v-model="selectedElements[0].element.name" type="text" class="property-input" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Preset</label>
-                <select
-                  :value="selectedElements[0].element.preset"
-                  @change="applyParticlePreset(selectedElements[0].element, $event.target.value)"
-                  class="property-select"
-                >
-                  <option v-for="(preset, key) in particlePresets" :key="key" :value="key">
-                    {{ preset.icon }} {{ preset.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Position</label>
-                <div class="property-row">
-                  <label class="property-sublabel">X</label>
-                  <input v-model.number="selectedElements[0].element.x" type="number" class="property-input-sm" />
-                  <label class="property-sublabel">Y</label>
-                  <input v-model.number="selectedElements[0].element.y" type="number" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Emission Area</label>
-                <div class="property-row">
-                  <label class="property-sublabel">W</label>
-                  <input v-model.number="selectedElements[0].element.width" type="number" min="1" class="property-input-sm" />
-                  <label class="property-sublabel">H</label>
-                  <input v-model.number="selectedElements[0].element.height" type="number" min="1" class="property-input-sm" />
-                </div>
-              </div>
-
-              <div class="property-divider">
-                <span>EMISSION</span>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Emit Rate (per sec)</label>
-                <input v-model.number="selectedElements[0].element.emitRate" type="number" min="1" class="property-input" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Lifetime (sec)</label>
-                <div class="property-row">
-                  <label class="property-sublabel">Min</label>
-                  <input v-model.number="selectedElements[0].element.lifetime.min" type="number" step="0.1" min="0.1" class="property-input-sm" />
-                  <label class="property-sublabel">Max</label>
-                  <input v-model.number="selectedElements[0].element.lifetime.max" type="number" step="0.1" min="0.1" class="property-input-sm" />
-                </div>
-              </div>
-
-              <div class="property-divider">
-                <span>MOVEMENT</span>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Speed</label>
-                <div class="property-row">
-                  <label class="property-sublabel">Min</label>
-                  <input v-model.number="selectedElements[0].element.speed.min" type="number" min="0" class="property-input-sm" />
-                  <label class="property-sublabel">Max</label>
-                  <input v-model.number="selectedElements[0].element.speed.max" type="number" min="0" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Direction (deg)</label>
-                <div class="property-row">
-                  <label class="property-sublabel">Min</label>
-                  <input v-model.number="selectedElements[0].element.direction.min" type="number" class="property-input-sm" />
-                  <label class="property-sublabel">Max</label>
-                  <input v-model.number="selectedElements[0].element.direction.max" type="number" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Gravity</label>
-                <input v-model.number="selectedElements[0].element.gravity" type="number" class="property-input" />
-              </div>
-
-              <div class="property-divider">
-                <span>APPEARANCE</span>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Size</label>
-                <div class="property-row">
-                  <label class="property-sublabel">Start</label>
-                  <input v-model.number="selectedElements[0].element.size.start" type="number" min="1" class="property-input-sm" />
-                  <label class="property-sublabel">End</label>
-                  <input v-model.number="selectedElements[0].element.size.end" type="number" min="1" class="property-input-sm" />
-                </div>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Color Start</label>
-                <input v-model="selectedElements[0].element.color.start" type="text" class="property-input" placeholder="#rrggbbaa" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Color End</label>
-                <input v-model="selectedElements[0].element.color.end" type="text" class="property-input" placeholder="#rrggbbaa" />
-              </div>
-              <div class="property-group">
-                <label class="property-label">Shape</label>
-                <select v-model="selectedElements[0].element.shape" class="property-select">
-                  <option value="circle">Circle</option>
-                  <option value="square">Square</option>
-                  <option value="star">Star</option>
-                  <option value="line">Line</option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">Blend Mode</label>
-                <select v-model="selectedElements[0].element.blendMode" class="property-select">
-                  <option value="normal">Normal</option>
-                  <option value="screen">Screen (Additive)</option>
-                  <option value="multiply">Multiply</option>
-                  <option value="overlay">Overlay</option>
-                </select>
-              </div>
-              <div class="property-group">
-                <label class="property-label">
-                  <input type="checkbox" v-model="selectedElements[0].element.enabled" />
-                  Enabled
-                </label>
-              </div>
-              <button class="delete-btn" @click="deleteSelectedParticle">🗑 Delete Emitter</button>
-            </template>
+            <ParticleProperties
+              v-if="selectedElements[0].type === 'particle'"
+              :element="selectedElements[0].element"
+              :particle-presets="particlePresets"
+              @delete="deleteSelectedParticle"
+              @apply-preset="(preset) => applyParticlePreset(selectedElements[0].element, preset)"
+            />
           </div>
         </div>
       </aside>

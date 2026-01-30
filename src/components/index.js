@@ -49,6 +49,11 @@ export { default as PropertyField } from './properties/PropertyField.vue'
 export { default as PropertyGroup } from './properties/PropertyGroup.vue'
 export { default as PuzzleProperties } from './properties/PuzzleProperties.vue'
 export { default as CutsceneProperties } from './properties/CutsceneProperties.vue'
+export { default as LightProperties } from './properties/LightProperties.vue'
+export { default as ParticleProperties } from './properties/ParticleProperties.vue'
+export { default as ItemProperties } from './properties/ItemProperties.vue'
+export { default as DialogProperties } from './properties/DialogProperties.vue'
+export { default as AudioProperties } from './properties/AudioProperties.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
