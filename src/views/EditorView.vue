@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useClaudeSocket } from '@/composables/useClaudeSocket'
 import { useProjectApi } from '@/composables/useProjectApi'
 import { useAssetApi } from '@/composables/useAssetApi'
+import { useUndoRedo } from '@/composables/useUndoRedo'
+import { useKeyboardShortcuts, createEditorShortcuts } from '@/composables/useKeyboardShortcuts'
+import { useElementSelection } from '@/composables/useElementSelection'
+import { usePanelState } from '@/composables/usePanelState'
 
 // Refactored components
 import {
@@ -47,6 +51,18 @@ const currentUserId = computed(() => {
 
 const route = useRoute()
 const router = useRouter()
+
+// Initialize panel state composable
+const {
+  leftPanelOpen,
+  rightPanelOpen,
+  collapsedSections,
+  visibleTypes,
+  toggleSection,
+  toggleVisibility,
+  showGrid,
+  toggleGrid
+} = usePanelState()
 
 // Project data
 const projectId = computed(() => route.params.projectId)
@@ -633,12 +649,9 @@ watch(currentScene, () => {
   }, AUTO_SAVE_DEBOUNCE)
 }, { deep: true })
 
-// UI state
-const leftPanelOpen = ref(true)
-const rightPanelOpen = ref(true)
+// UI state (panel state from usePanelState composable)
 const selectedElements = ref([])
 const zoom = ref(1.0) // Start at 100%
-const showGrid = ref(true) // Grid visibility
 
 // =====================
 // PLAY MODE
@@ -2228,53 +2241,7 @@ const stopParticleLoop = () => {
   }
 }
 
-// Section collapsed state (all start collapsed)
-const collapsedSections = ref({
-  images: true,
-  walkboxes: true,
-  exits: true,
-  actorPlacements: true,
-  hotspots: true,
-  zplanes: true,
-  dialogs: true,
-  puzzles: true,
-  sfx: true,
-  music: true,
-  cutscenes: true,
-  animations: true,
-  lights: true,
-  particles: true,
-  // Global sections
-  assets: true,
-  audioAssets: true,
-  globalActors: true,
-  verbs: true,
-  items: true,
-  inventory: true
-})
-
-// Element visibility state (all start visible)
-const visibleTypes = ref({
-  images: true,
-  walkboxes: true,
-  exits: true,
-  actors: true,
-  hotspots: true,
-  zplanes: true,
-  animations: true,
-  lights: true,
-  particles: true
-})
-
-// Toggle section collapsed state
-const toggleSection = (type) => {
-  collapsedSections.value[type] = !collapsedSections.value[type]
-}
-
-// Toggle element type visibility
-const toggleVisibility = (type) => {
-  visibleTypes.value[type] = !visibleTypes.value[type]
-}
+// Panel state (collapsedSections, visibleTypes, toggleSection, toggleVisibility) from usePanelState composable
 
 // Select all elements of a type
 const selectAllOfType = (type, arrayName) => {
