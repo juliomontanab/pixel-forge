@@ -364,23 +364,28 @@ export function usePlayMode(options = {}) {
     playModeState.value.playerState = `walk-${playModeState.value.playerDirection}`
   }
 
-  // Check if player is inside an exit area
+  // Check if player is near an exit area (proximity-based, not strict bounds)
   const checkExitCollision = () => {
     const pos = playModeState.value.playerPosition
     const exits = currentScene.value?.exits || []
 
     for (const exit of exits) {
-      // Check if player center is inside exit bounds
-      if (pos.x >= exit.x && pos.x <= exit.x + exit.w &&
-          pos.y >= exit.y && pos.y <= exit.y + exit.h) {
-        if (exit.targetScene) {
-          // Stop walking and transition to target scene
-          playModeState.value.isWalking = false
-          playModeState.value.walkTarget = null
-          playModeState.value.walkCallback = null
-          changeSceneWithTransition(exit.targetScene)
-          return true
-        }
+      // Calculate distance from player to exit center
+      const exitCenterX = exit.x + (exit.w || 0) / 2
+      const exitCenterY = exit.y + (exit.h || 0) / 2
+      const distance = Math.hypot(pos.x - exitCenterX, pos.y - exitCenterY)
+
+      // Trigger if player is within exit radius (half of exit size + threshold)
+      const exitRadius = Math.max(exit.w || 50, exit.h || 50) / 2 + 30
+      const isNearExit = distance < exitRadius
+
+      if (isNearExit && exit.targetScene) {
+        console.log('[PlayMode] Exit triggered:', exit.name, '-> scene', exit.targetScene)
+        playModeState.value.isWalking = false
+        playModeState.value.walkTarget = null
+        playModeState.value.walkCallback = null
+        changeSceneWithTransition(exit.targetScene)
+        return true
       }
     }
     return false
