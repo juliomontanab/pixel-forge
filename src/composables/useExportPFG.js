@@ -10,8 +10,11 @@
 
 import { ref } from 'vue'
 import JSZip from 'jszip'
+import { useAssetApi } from './useAssetApi'
 
 export function useExportPFG() {
+  // Get asset API for fetching signed URLs
+  const { getAssetUrl } = useAssetApi()
   const isExporting = ref(false)
   const exportProgress = ref(0)
   const exportStatus = ref('')
@@ -91,28 +94,55 @@ export function useExportPFG() {
 
   /**
    * Get asset URL from assets array by ID or direct URL
+   * Returns a fresh signed URL from S3 if needed
    */
-  const resolveAssetUrl = (assetIdOrUrl, assets) => {
+  const resolveAssetUrl = async (assetIdOrUrl, assets) => {
     if (!assetIdOrUrl) return null
 
-    // If it's already a string URL, return it
+    // If it's already a string URL (data URL or full URL), return it
     if (typeof assetIdOrUrl === 'string') {
+      // If it's a data URL, return directly
+      if (assetIdOrUrl.startsWith('data:')) {
+        return assetIdOrUrl
+      }
+      // If it looks like an S3 key (no http), get a fresh signed URL
+      if (!assetIdOrUrl.startsWith('http')) {
+        console.log(`Getting signed URL for s3Key: ${assetIdOrUrl}`)
+        const signedUrl = await getAssetUrl(assetIdOrUrl)
+        return signedUrl
+      }
+      // It's already a full URL
       return assetIdOrUrl
     }
 
     // If it's a number, look up in assets
     if (typeof assetIdOrUrl === 'number') {
       const asset = assets.find(a => a.id === assetIdOrUrl)
-      if (asset && asset.url) {
-        return asset.url
+      if (asset) {
+        // Prefer s3Key for a fresh signed URL
+        if (asset.s3Key) {
+          console.log(`Getting signed URL for asset ${assetIdOrUrl} (s3Key: ${asset.s3Key})`)
+          const signedUrl = await getAssetUrl(asset.s3Key)
+          return signedUrl
+        }
+        // Fall back to existing URL
+        if (asset.url) {
+          return asset.url
+        }
       }
       console.warn(`Asset ID ${assetIdOrUrl} not found in assets`)
       return null
     }
 
-    // If it's an object with url property
-    if (assetIdOrUrl && typeof assetIdOrUrl === 'object' && assetIdOrUrl.url) {
-      return assetIdOrUrl.url
+    // If it's an object with s3Key or url property
+    if (assetIdOrUrl && typeof assetIdOrUrl === 'object') {
+      if (assetIdOrUrl.s3Key) {
+        const signedUrl = await getAssetUrl(assetIdOrUrl.s3Key)
+        return signedUrl
+      }
+      if (assetIdOrUrl.url) {
+        return assetIdOrUrl.url
+      }
     }
 
     console.warn('Unknown asset reference type:', typeof assetIdOrUrl, assetIdOrUrl)
@@ -179,7 +209,7 @@ export function useExportPFG() {
    */
   const exportSceneBackground = async (zip, scene, sceneFolder, assets) => {
     // Try to get background from scene.background (can be ID or URL)
-    let backgroundUrl = resolveAssetUrl(scene.background, assets)
+    let backgroundUrl = await resolveAssetUrl(scene.background, assets)
 
     // If no background, try to find it in images
     if (!backgroundUrl && scene.images?.length > 0) {
@@ -190,7 +220,7 @@ export function useExportPFG() {
         img.name?.toLowerCase().includes('fondo')
       )
       if (bgImage) {
-        backgroundUrl = resolveAssetUrl(bgImage.src || bgImage.assetId, assets)
+        backgroundUrl = await resolveAssetUrl(bgImage.src || bgImage.assetId, assets)
       }
     }
 
@@ -198,7 +228,7 @@ export function useExportPFG() {
     if (!backgroundUrl && scene.images?.length > 0) {
       const firstImage = scene.images[0]
       if (firstImage) {
-        backgroundUrl = resolveAssetUrl(firstImage.src || firstImage.assetId, assets)
+        backgroundUrl = await resolveAssetUrl(firstImage.src || firstImage.assetId, assets)
       }
     }
 
@@ -233,7 +263,7 @@ export function useExportPFG() {
     if (scene.images?.length > 0) {
       const layersFolder = `${sceneFolder}/layers`
       for (const img of scene.images) {
-        const imgUrl = resolveAssetUrl(img.src || img.assetId, assets)
+        const imgUrl = await resolveAssetUrl(img.src || img.assetId, assets)
         if (imgUrl && !img.isBackground) {
           const blob = await fetchImageAsBlob(imgUrl)
           if (blob) {
@@ -256,7 +286,7 @@ export function useExportPFG() {
     zip.file(`${actorFolder}/animations.json`, JSON.stringify(actorData, null, 2))
 
     // Export spritesheet if available
-    const spritesheetUrl = resolveAssetUrl(actor.spritesheet || actor.spritesheetAssetId, assets)
+    const spritesheetUrl = await resolveAssetUrl(actor.spritesheet || actor.spritesheetAssetId, assets)
     if (spritesheetUrl) {
       const blob = await fetchImageAsBlob(spritesheetUrl)
       if (blob) {
@@ -276,13 +306,13 @@ export function useExportPFG() {
     for (const scene of project.scenes) {
       if (scene.music) {
         for (const m of scene.music) {
-          const url = resolveAssetUrl(m.file || m.assetId, assets)
+          const url = await resolveAssetUrl(m.file || m.assetId, assets)
           if (url) musicFiles.add(url)
         }
       }
       if (scene.sfx) {
         for (const s of scene.sfx) {
-          const url = resolveAssetUrl(s.file || s.assetId, assets)
+          const url = await resolveAssetUrl(s.file || s.assetId, assets)
           if (url) sfxFiles.add(url)
         }
       }
