@@ -33,6 +33,7 @@ import { useCutsceneActions } from '@/composables/useCutsceneActions'
 import { useItemUI } from '@/composables/useItemUI'
 import { useDialogEditor } from '@/composables/useDialogEditor'
 import { useAssetUI, CATEGORY_LABELS } from '@/composables/useAssetUI'
+import { useExportPFG } from '@/composables/useExportPFG'
 import { DEFAULT_VERBS, ensureSceneStructure, ensureGlobalDataStructure } from '@/composables/useSceneEditor'
 
 // Simple deep clone utility
@@ -938,6 +939,25 @@ const {
   router
 })
 
+// Initialize PFG export composable
+const {
+  exportToPFG,
+  exportForSwitch,
+  isExporting: isExportingPFG,
+  exportProgress: pfgExportProgress,
+  exportStatus: pfgExportStatus
+} = useExportPFG()
+
+// Handle Switch export
+const handleExportToSwitch = async () => {
+  try {
+    await exportForSwitch(project.value)
+  } catch (error) {
+    console.error('Switch export failed:', error)
+    alert('Export failed: ' + error.message)
+  }
+}
+
 // Initialize parallax composable
 const {
   cameraPosition,
@@ -1474,7 +1494,8 @@ onUnmounted(() => {
           <span class="save-text">{{ saveStatus === 'saving' ? 'Saving...' : saveStatus === 'unsaved' ? 'Unsaved' : formatLastSaved }}</span>
         </div>
         <button class="header-btn" @click="handleSave" title="Save (Auto-save enabled)">💾</button>
-        <button class="header-btn" @click="handleExport" title="Export Project">📦</button>
+        <button class="header-btn" @click="handleExport" title="Export JSON">📦</button>
+        <button class="header-btn switch-btn" @click="handleExportToSwitch" :disabled="isExportingPFG" title="Export to Switch (.pfg)">🎮</button>
         <button class="header-btn" @click="handleImport" title="Import Project">📂</button>
         <span class="header-separator">|</span>
         <button class="header-btn ai-btn" @click="openAiPanel" title="AI Assistant - Generate from Script">🤖 AI</button>

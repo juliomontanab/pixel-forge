@@ -70,3 +70,6 @@ export { useCutsceneActions, ACTION_TYPES } from './useCutsceneActions'
 export { useItemUI } from './useItemUI'
 export { useDialogEditor } from './useDialogEditor'
 export { useAssetUI, CATEGORY_LABELS } from './useAssetUI'
+
+// Export composables
+export { useExportPFG } from './useExportPFG'
