@@ -80,7 +80,7 @@ export function useExportPFG() {
       images: (scene.images || []).map(img => ({
         id: img.id,
         name: img.name || 'Image',
-        asset: img.src ? img.src.split('/').pop() : '',
+        asset: `image-${img.id}.png`,
         x: img.x || 0,
         y: img.y || 0,
         z: img.zIndex || 0,
@@ -90,11 +90,47 @@ export function useExportPFG() {
   }
 
   /**
+   * Get asset URL from assets array by ID or direct URL
+   */
+  const resolveAssetUrl = (assetIdOrUrl, assets) => {
+    if (!assetIdOrUrl) return null
+
+    // If it's already a string URL, return it
+    if (typeof assetIdOrUrl === 'string') {
+      return assetIdOrUrl
+    }
+
+    // If it's a number, look up in assets
+    if (typeof assetIdOrUrl === 'number') {
+      const asset = assets.find(a => a.id === assetIdOrUrl)
+      if (asset && asset.url) {
+        return asset.url
+      }
+      console.warn(`Asset ID ${assetIdOrUrl} not found in assets`)
+      return null
+    }
+
+    // If it's an object with url property
+    if (assetIdOrUrl && typeof assetIdOrUrl === 'object' && assetIdOrUrl.url) {
+      return assetIdOrUrl.url
+    }
+
+    console.warn('Unknown asset reference type:', typeof assetIdOrUrl, assetIdOrUrl)
+    return null
+  }
+
+  /**
    * Fetch and convert image to blob
    */
   const fetchImageAsBlob = async (url) => {
     try {
       if (!url) return null
+
+      // Ensure it's a string
+      if (typeof url !== 'string') {
+        console.warn('fetchImageAsBlob received non-string:', typeof url, url)
+        return null
+      }
 
       // Handle data URLs
       if (url.startsWith('data:')) {
@@ -104,7 +140,10 @@ export function useExportPFG() {
 
       // Handle regular URLs
       const response = await fetch(url, { mode: 'cors' })
-      if (!response.ok) return null
+      if (!response.ok) {
+        console.warn('Failed to fetch:', url, response.status)
+        return null
+      }
       return await response.blob()
     } catch (error) {
       console.warn('Failed to fetch image:', url, error)
@@ -138,27 +177,41 @@ export function useExportPFG() {
   /**
    * Export scene background
    */
-  const exportSceneBackground = async (zip, scene, sceneFolder) => {
-    // Try to get background from scene
-    let backgroundUrl = scene.background
+  const exportSceneBackground = async (zip, scene, sceneFolder, assets) => {
+    // Try to get background from scene.background (can be ID or URL)
+    let backgroundUrl = resolveAssetUrl(scene.background, assets)
 
     // If no background, try to find it in images
     if (!backgroundUrl && scene.images?.length > 0) {
-      const bgImage = scene.images.find(img => img.isBackground || img.name?.toLowerCase().includes('background'))
+      // Look for an image marked as background
+      const bgImage = scene.images.find(img =>
+        img.isBackground ||
+        img.name?.toLowerCase().includes('background') ||
+        img.name?.toLowerCase().includes('fondo')
+      )
       if (bgImage) {
-        backgroundUrl = bgImage.src
+        backgroundUrl = resolveAssetUrl(bgImage.src || bgImage.assetId, assets)
+      }
+    }
+
+    // If still no background, try to find any large image or first image
+    if (!backgroundUrl && scene.images?.length > 0) {
+      const firstImage = scene.images[0]
+      if (firstImage) {
+        backgroundUrl = resolveAssetUrl(firstImage.src || firstImage.assetId, assets)
       }
     }
 
     if (backgroundUrl) {
+      console.log(`Fetching background for scene ${scene.id}:`, backgroundUrl)
       const blob = await fetchImageAsBlob(backgroundUrl)
       if (blob) {
         zip.file(`${sceneFolder}/background.png`, blob)
+        console.log(`Background added for scene ${scene.id}`)
         return true
       }
     }
 
-    // Create placeholder if no background
     console.warn(`No background found for scene ${scene.id}`)
     return false
   }
@@ -166,7 +219,7 @@ export function useExportPFG() {
   /**
    * Export a single scene
    */
-  const exportScene = async (zip, scene, project) => {
+  const exportScene = async (zip, scene, project, assets) => {
     const sceneFolder = `scenes/scene-${scene.id}`
 
     // Create scene data.json
@@ -174,14 +227,15 @@ export function useExportPFG() {
     zip.file(`${sceneFolder}/data.json`, JSON.stringify(sceneData, null, 2))
 
     // Export background
-    await exportSceneBackground(zip, scene, sceneFolder)
+    await exportSceneBackground(zip, scene, sceneFolder, assets)
 
     // Export scene images (layers)
     if (scene.images?.length > 0) {
       const layersFolder = `${sceneFolder}/layers`
       for (const img of scene.images) {
-        if (img.src && !img.isBackground) {
-          const blob = await fetchImageAsBlob(img.src)
+        const imgUrl = resolveAssetUrl(img.src || img.assetId, assets)
+        if (imgUrl && !img.isBackground) {
+          const blob = await fetchImageAsBlob(imgUrl)
           if (blob) {
             const filename = `image-${img.id}.png`
             zip.file(`${layersFolder}/${filename}`, blob)
@@ -194,7 +248,7 @@ export function useExportPFG() {
   /**
    * Export actor with spritesheet
    */
-  const exportActor = async (zip, actor, project) => {
+  const exportActor = async (zip, actor, project, assets) => {
     const actorFolder = `actors/actor-${actor.id}`
 
     // Create animations.json
@@ -202,8 +256,9 @@ export function useExportPFG() {
     zip.file(`${actorFolder}/animations.json`, JSON.stringify(actorData, null, 2))
 
     // Export spritesheet if available
-    if (actor.spritesheet) {
-      const blob = await fetchImageAsBlob(actor.spritesheet)
+    const spritesheetUrl = resolveAssetUrl(actor.spritesheet || actor.spritesheetAssetId, assets)
+    if (spritesheetUrl) {
+      const blob = await fetchImageAsBlob(spritesheetUrl)
       if (blob) {
         zip.file(`${actorFolder}/spritesheet.png`, blob)
       }
@@ -213,7 +268,7 @@ export function useExportPFG() {
   /**
    * Export audio files
    */
-  const exportAudio = async (zip, project) => {
+  const exportAudio = async (zip, project, assets) => {
     // Collect all music files from scenes
     const musicFiles = new Set()
     const sfxFiles = new Set()
@@ -221,30 +276,32 @@ export function useExportPFG() {
     for (const scene of project.scenes) {
       if (scene.music) {
         for (const m of scene.music) {
-          if (m.file) musicFiles.add(m.file)
+          const url = resolveAssetUrl(m.file || m.assetId, assets)
+          if (url) musicFiles.add(url)
         }
       }
       if (scene.sfx) {
         for (const s of scene.sfx) {
-          if (s.file) sfxFiles.add(s.file)
+          const url = resolveAssetUrl(s.file || s.assetId, assets)
+          if (url) sfxFiles.add(url)
         }
       }
     }
 
     // Export music files
-    for (const file of musicFiles) {
-      const blob = await fetchImageAsBlob(file)
+    for (const fileUrl of musicFiles) {
+      const blob = await fetchImageAsBlob(fileUrl)
       if (blob) {
-        const filename = file.split('/').pop()
+        const filename = fileUrl.split('/').pop().split('?')[0] || 'music.mp3'
         zip.file(`audio/music/${filename}`, blob)
       }
     }
 
     // Export SFX files
-    for (const file of sfxFiles) {
-      const blob = await fetchImageAsBlob(file)
+    for (const fileUrl of sfxFiles) {
+      const blob = await fetchImageAsBlob(fileUrl)
       if (blob) {
-        const filename = file.split('/').pop()
+        const filename = fileUrl.split('/').pop().split('?')[0] || 'sfx.wav'
         zip.file(`audio/sfx/${filename}`, blob)
       }
     }
@@ -335,6 +392,10 @@ export function useExportPFG() {
       const totalSteps = project.scenes.length + 3 // scenes + manifest + actors + audio
       let currentStep = 0
 
+      // Get assets array for URL resolution
+      const assets = project.globalData?.assets || []
+      console.log(`Export starting with ${assets.length} assets available`)
+
       // 1. Generate manifest
       exportStatus.value = 'Generating manifest...'
       const manifest = generateManifest(project)
@@ -345,7 +406,7 @@ export function useExportPFG() {
       // 2. Export scenes
       for (const scene of project.scenes) {
         exportStatus.value = `Exporting scene: ${scene.name || scene.id}...`
-        await exportScene(zip, scene, project)
+        await exportScene(zip, scene, project, assets)
         currentStep++
         exportProgress.value = (currentStep / totalSteps) * 100
       }
@@ -354,7 +415,7 @@ export function useExportPFG() {
       exportStatus.value = 'Exporting actors...'
       if (project.globalData?.actors) {
         for (const actor of project.globalData.actors) {
-          await exportActor(zip, actor, project)
+          await exportActor(zip, actor, project, assets)
         }
       }
       currentStep++
@@ -362,7 +423,7 @@ export function useExportPFG() {
 
       // 4. Export audio
       exportStatus.value = 'Exporting audio...'
-      await exportAudio(zip, project)
+      await exportAudio(zip, project, assets)
       currentStep++
       exportProgress.value = (currentStep / totalSteps) * 100
 
