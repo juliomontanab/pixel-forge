@@ -35,6 +35,9 @@ import { useDialogEditor } from '@/composables/useDialogEditor'
 import { useAssetUI, CATEGORY_LABELS } from '@/composables/useAssetUI'
 import { DEFAULT_VERBS, ensureSceneStructure, ensureGlobalDataStructure } from '@/composables/useSceneEditor'
 
+// Simple deep clone utility
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj))
+
 // Refactored components
 import {
   BackgroundScaleModal,
