@@ -907,6 +907,15 @@ export function usePlayMode(options = {}) {
     const verbName = verb?.name?.toLowerCase() || 'look at'
     const verbId = verb?.id || 1
 
+    // SPECIAL HANDLING FOR EXITS: Always walk to them
+    // Collision detection in updateWalk() will trigger the scene change
+    if (obj.type === 'exit') {
+      const exitCenterX = obj.element.x + (obj.element.w || 0) / 2
+      const exitCenterY = obj.element.y + (obj.element.h || 0) / 2
+      walkToPoint(exitCenterX, exitCenterY)
+      return
+    }
+
     // CHECK CUSTOM INTERACTIONS FIRST
     if ((obj.type === 'hotspot' || obj.type === 'image') && obj.element.interactions?.length > 0) {
       const interaction = obj.element.interactions.find(i => i.verbId === verbId)
