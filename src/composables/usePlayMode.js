@@ -364,6 +364,28 @@ export function usePlayMode(options = {}) {
     playModeState.value.playerState = `walk-${playModeState.value.playerDirection}`
   }
 
+  // Check if player is inside an exit area
+  const checkExitCollision = () => {
+    const pos = playModeState.value.playerPosition
+    const exits = currentScene.value?.exits || []
+
+    for (const exit of exits) {
+      // Check if player center is inside exit bounds
+      if (pos.x >= exit.x && pos.x <= exit.x + exit.w &&
+          pos.y >= exit.y && pos.y <= exit.y + exit.h) {
+        if (exit.targetScene) {
+          // Stop walking and transition to target scene
+          playModeState.value.isWalking = false
+          playModeState.value.walkTarget = null
+          playModeState.value.walkCallback = null
+          changeSceneWithTransition(exit.targetScene)
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   const updateWalk = () => {
     if (!playModeState.value.isWalking || !playModeState.value.walkTarget) return
 
@@ -381,6 +403,9 @@ export function usePlayMode(options = {}) {
       playModeState.value.playerState = 'idle'
       playModeState.value.walkTarget = null
 
+      // Check for exit collision at destination
+      if (checkExitCollision()) return
+
       if (playModeState.value.walkCallback) {
         const callback = playModeState.value.walkCallback
         playModeState.value.walkCallback = null
@@ -391,6 +416,9 @@ export function usePlayMode(options = {}) {
       const moveY = (dy / dist) * speed
       playModeState.value.playerPosition.x += moveX
       playModeState.value.playerPosition.y += moveY
+
+      // Check for exit collision while walking
+      if (checkExitCollision()) return
 
       if (Math.abs(dx) > Math.abs(dy)) {
         playModeState.value.playerDirection = dx > 0 ? 'east' : 'west'
