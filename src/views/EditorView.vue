@@ -9,7 +9,7 @@ import { useKeyboardShortcuts, createEditorShortcuts } from '@/composables/useKe
 import { useElementSelection } from '@/composables/useElementSelection'
 import { usePanelState } from '@/composables/usePanelState'
 import { useCanvasZoom } from '@/composables/useCanvasZoom'
-import { useParticleSystem, particlePresets, parseColor } from '@/composables/useParticleSystem'
+import { useParticleSystem, particlePresets } from '@/composables/useParticleSystem'
 import { useLighting, lightTypes } from '@/composables/useLighting'
 import { useAudioPlayback } from '@/composables/useAudioPlayback'
 import { useElementCRUD } from '@/composables/useElementCRUD'
@@ -44,12 +44,8 @@ import {
   CanvasGrid,
   CanvasWalkbox,
   CanvasElement,
-  CanvasLighting,
-  CanvasParticles,
-  EditorHeader,
   EditorStatusBar,
   PlayModeOverlay,
-  ZoomControls,
   SceneTabs,
   ElementSection,
   ActorPlacementsSection,
@@ -84,7 +80,8 @@ import {
   BaseElementProperties,
   MultiSelectionPanel,
   CanvasElements,
-  CanvasPlayModePlayer
+  CanvasPlayModePlayer,
+  CanvasBackground
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -1126,7 +1123,6 @@ setupAutoSaveWatcher()
 // Particle and lighting functions from composables:
 // - activeParticles, getParticleStyle, updateParticles, startResizeParticle from useParticleSystem
 // - getLightPreviewStyle, getLightingGradient, getLightIcon from useLighting
-// - parseColor from useParticleSystem
 
 // Custom particle animation loop (wraps composable's updateParticles with parallax updates)
 let particleAnimationFrame = null
@@ -1171,49 +1167,6 @@ const selectAllOfType = (type, arrayName) => {
     selectedElements.value = [...selectedElements.value, ...newSelections]
   }
 }
-
-// Check if all elements of a type are selected
-const isAllSelectedOfType = (type, arrayName) => {
-  const elements = currentScene.value[arrayName]
-  if (!elements || elements.length === 0) return false
-  return elements.every(el =>
-    selectedElements.value.some(s => s.type === type && s.element.id === el.id)
-  )
-}
-
-// Check if some (but not all) elements of a type are selected
-const isSomeSelectedOfType = (type, arrayName) => {
-  const elements = currentScene.value[arrayName]
-  if (!elements || elements.length === 0) return false
-  const selectedCount = elements.filter(el =>
-    selectedElements.value.some(s => s.type === type && s.element.id === el.id)
-  ).length
-  return selectedCount > 0 && selectedCount < elements.length
-}
-
-// Element counts
-const elementCounts = computed(() => ({
-  images: currentScene.value.images.length,
-  walkboxes: currentScene.value.walkboxes.length,
-  exits: currentScene.value.exits.length,
-  actorPlacements: currentScene.value.actorPlacements.length,
-  hotspots: currentScene.value.hotspots.length,
-  zplanes: currentScene.value.zplanes.length,
-  dialogs: currentScene.value.dialogs.length,
-  puzzles: currentScene.value.puzzles.length,
-  verbs: project.value.globalData.verbs.length,
-  sfx: currentScene.value.sfx.length,
-  music: currentScene.value.music.length,
-  cutscenes: currentScene.value.cutscenes.length,
-  animations: project.value.globalData?.animations?.length || 0,
-  lights: currentScene.value.lighting?.lights?.length || 0,
-  particles: currentScene.value.particles?.length || 0,
-  assets: project.value.globalData.assets.length,
-  audioAssets: project.value.globalData.audioAssets.length,
-  items: project.value.globalData.items.length,
-  inventory: project.value.globalData.inventory.length,
-  globalActors: project.value.globalData.actors.length
-}))
 
 // Element sections configuration for data-driven rendering (grouped by position in panel)
 // Group 1: Spatial elements before ActorPlacements
@@ -1375,39 +1328,29 @@ const handleSelectElement = (type, element, event) => {
 // LIGHT & PARTICLE MANAGEMENT
 // =====================
 // Delete selected light
-const deleteSelectedLight = () => {
-  if (selectedElements.value.length === 0 || selectedElements.value[0].type !== 'light') return
-
-  const lightId = selectedElements.value[0].element.id
-  const idx = currentScene.value.lighting.lights.findIndex(l => l.id === lightId)
+// Generic delete handler for special element types (lights, particles)
+const deleteSelectedOfType = (type, getArray, onDelete) => {
+  if (selectedElements.value.length === 0 || selectedElements.value[0].type !== type) return
+  const id = selectedElements.value[0].element.id
+  const array = getArray()
+  const idx = array.findIndex(el => el.id === id)
   if (idx > -1) {
-    currentScene.value.lighting.lights.splice(idx, 1)
+    array.splice(idx, 1)
+    onDelete?.(id)
     selectedElements.value = []
   }
 }
 
-// Delete selected particle emitter
-const deleteSelectedParticle = () => {
-  if (selectedElements.value.length === 0 || selectedElements.value[0].type !== 'particle') return
+const deleteSelectedLight = () => deleteSelectedOfType(
+  'light',
+  () => currentScene.value.lighting.lights
+)
 
-  const emitterId = selectedElements.value[0].element.id
-  const idx = currentScene.value.particles.findIndex(p => p.id === emitterId)
-  if (idx > -1) {
-    currentScene.value.particles.splice(idx, 1)
-    // Clean up active particles
-    delete activeParticles.value[emitterId]
-    selectedElements.value = []
-  }
-}
-
-// Get all scene objects (for puzzle targeting)
-const getAllSceneObjects = computed(() => {
-  const objects = []
-  currentScene.value.hotspots.forEach(h => objects.push({ type: 'hotspot', id: h.id, name: h.name }))
-  currentScene.value.images.forEach(i => objects.push({ type: 'image', id: i.id, name: i.name }))
-  currentScene.value.exits.forEach(e => objects.push({ type: 'exit', id: e.id, name: e.name }))
-  return objects
-})
+const deleteSelectedParticle = () => deleteSelectedOfType(
+  'particle',
+  () => currentScene.value.particles,
+  (id) => delete activeParticles.value[id]
+)
 
 // Actor animation preview interval
 let actorPreviewInterval = null
@@ -1481,9 +1424,7 @@ onUnmounted(() => {
   // Cleanup selection composable (removes drag/resize/rotate event listeners)
   cleanupSelection()
 
-  // Remove remaining event listeners (keyboard shortcuts handled by composable)
-  document.removeEventListener('mousemove', onVertexDragMove)
-  document.removeEventListener('mouseup', onVertexDragEnd)
+  // Remove remaining event listeners
   document.removeEventListener('click', handleGlobalClick)
   unregisterAllShortcuts()
   stopActorAnimationPreview()
@@ -1782,37 +1723,19 @@ onUnmounted(() => {
             @contextmenu="showContextMenu"
           >
             <!-- Background -->
-            <div
-              class="canvas-background"
-              :class="{ 'has-image': currentScene.background && getAssetById(currentScene.background) }"
-              :style="currentScene.background && getAssetById(currentScene.background) && getAssetDisplayUrl(getAssetById(currentScene.background)) ? {
-                backgroundImage: `url(${getAssetDisplayUrl(getAssetById(currentScene.background))})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center'
-              } : {}"
-            >
-              <span v-if="!currentScene.background" class="background-placeholder">
-                🎨<br>
-                <span class="pixel-font-sm">Select background in Scene properties</span>
-              </span>
-              <span v-else-if="!getAssetDisplayUrl(getAssetById(currentScene.background))" class="background-loading">
-                ⏳ Loading...
-              </span>
-            </div>
+            <CanvasBackground
+              :background-asset-id="currentScene.background"
+              :get-asset-by-id="getAssetById"
+              :get-asset-display-url="getAssetDisplayUrl"
+            />
 
             <!-- Grid overlay -->
-            <div
+            <CanvasGrid
               v-if="showGrid"
-              class="canvas-grid"
-              :style="{
-                '--grid-size': (32 * zoom) + 'px',
-                '--center-x': (currentScene.width / 2 * zoom) + 'px',
-                '--center-y': (currentScene.height / 2 * zoom) + 'px'
-              }"
-            >
-              <div class="grid-center-h"></div>
-              <div class="grid-center-v"></div>
-            </div>
+              :width="currentScene.width"
+              :height="currentScene.height"
+              :zoom="zoom"
+            />
 
             <!-- Elements overlay -->
             <div class="elements-overlay">
@@ -2008,7 +1931,6 @@ onUnmounted(() => {
               :element="selectedElements[0].element"
             />
 
-            <!-- Dialog properties -->
             <!-- Dialog properties -->
             <DialogProperties
               v-if="selectedElements[0].type === 'dialog'"
