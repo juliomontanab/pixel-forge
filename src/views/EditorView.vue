@@ -33,14 +33,10 @@ import { useCutsceneActions } from '@/composables/useCutsceneActions'
 import { useItemUI } from '@/composables/useItemUI'
 import { useDialogEditor } from '@/composables/useDialogEditor'
 import { useAssetUI, CATEGORY_LABELS } from '@/composables/useAssetUI'
+import { DEFAULT_VERBS, ensureSceneStructure, ensureGlobalDataStructure } from '@/composables/useSceneEditor'
 
 // Refactored components
 import {
-  PixelModal,
-  ConfirmModal,
-  PromptModal,
-  ListSelectModal,
-  ContextMenu,
   BackgroundScaleModal,
   AssetManagerModal,
   AudioManagerModal,
@@ -53,12 +49,8 @@ import {
   EditorHeader,
   EditorStatusBar,
   PlayModeOverlay,
-  SceneActionsBar,
   ZoomControls,
-  LeftPanel,
-  PropertiesPanel,
   SceneTabs,
-  ElementList,
   ElementSection,
   ActorPlacementsSection,
   AnimationsSection,
@@ -89,7 +81,10 @@ import {
   WalkboxProperties,
   ZPlaneProperties,
   VerbProperties,
-  CanvasElements
+  BaseElementProperties,
+  MultiSelectionPanel,
+  CanvasElements,
+  CanvasPlayModePlayer
 } from '@/components'
 
 const { getProjectById, saveProject: saveProjectToApi } = useProjectApi()
@@ -176,17 +171,7 @@ const project = ref({
     // Game state variables/flags
     variables: {},
     // Verbs (global - same verbs across all scenes)
-    verbs: [
-      { id: 1, name: 'Mirar', icon: '👁', key: 'l' },
-      { id: 2, name: 'Recoger', icon: '✋', key: 'p' },
-      { id: 3, name: 'Usar', icon: '🔧', key: 'u' },
-      { id: 4, name: 'Abrir', icon: '📂', key: 'o' },
-      { id: 5, name: 'Cerrar', icon: '📁', key: 'c' },
-      { id: 6, name: 'Empujar', icon: '👉', key: 'e' },
-      { id: 7, name: 'Tirar', icon: '👈', key: 'y' },
-      { id: 8, name: 'Hablar', icon: '💬', key: 't' },
-      { id: 9, name: 'Dar', icon: '🎁', key: 'g' }
-    ]
+    verbs: JSON.parse(JSON.stringify(DEFAULT_VERBS))
   },
 
   // All scenes in the project
@@ -277,58 +262,6 @@ const availableScenes = computed(() =>
   project.value.scenes.map(s => ({ id: s.id, name: s.name }))
 )
 
-// Ensure scene has all required properties
-const ensureSceneStructure = (scene) => {
-  if (!scene) return scene
-
-  // Arrays that must exist
-  const arrayProps = ['images', 'walkboxes', 'exits', 'actorPlacements', 'hotspots', 'zplanes',
-                      'dialogs', 'puzzles', 'sfx', 'music', 'cutscenes', 'animations', 'particles', 'groups', 'elementFolders']
-  arrayProps.forEach(prop => {
-    if (!scene[prop]) scene[prop] = []
-  })
-
-  // Lighting structure
-  if (!scene.lighting) {
-    scene.lighting = { ambient: { color: '#ffffff', intensity: 1.0 }, lights: [] }
-  }
-  if (!scene.lighting.ambient) {
-    scene.lighting.ambient = { color: '#ffffff', intensity: 1.0 }
-  }
-  if (!scene.lighting.lights) {
-    scene.lighting.lights = []
-  }
-
-  // Ensure elements have folderPath (migration)
-  scene.images?.forEach(img => { if (!img.folderPath) img.folderPath = '/' })
-  scene.hotspots?.forEach(h => { if (!h.folderPath) h.folderPath = '/' })
-
-  return scene
-}
-
-// Ensure globalData has all required properties
-const ensureGlobalDataStructure = (globalData) => {
-  if (!globalData) return globalData
-
-  // Arrays that must exist
-  if (!globalData.assets) globalData.assets = []
-  if (!globalData.assetFolders) globalData.assetFolders = []
-  if (!globalData.audioAssets) globalData.audioAssets = []
-  if (!globalData.animations) globalData.animations = []
-  if (!globalData.items) globalData.items = []
-  if (!globalData.inventory) globalData.inventory = []
-  if (!globalData.actors) globalData.actors = []
-  if (!globalData.verbs) globalData.verbs = []
-  if (!globalData.variables) globalData.variables = {}
-
-  // Ensure each asset has folderPath
-  globalData.assets.forEach(asset => {
-    if (!asset.folderPath) asset.folderPath = '/'
-  })
-
-  return globalData
-}
-
 // Computed: Current scene (reactive reference to the active scene)
 const currentScene = computed({
   get: () => {
@@ -344,21 +277,16 @@ const currentScene = computed({
   }
 })
 
-// Computed: Global data shortcuts (globalAssets, globalAssetFolders, globalAudioAssets come from useAssetManager)
-// (globalAnimations comes from useAnimations)
-const globalItems = computed(() => project.value.globalData?.items || [])
-const globalInventory = computed(() => project.value.globalData?.inventory || [])
+// Computed: Global actors (used by useAnimations and GlobalActorsSection)
 const globalActors = computed(() => project.value.globalData?.actors || [])
-const globalVerbs = computed(() => project.value.globalData?.verbs || [])
-const globalVariables = computed(() => project.value.globalData?.variables || {})
 
 // =====================
 // UNDO/REDO SYSTEM (via useUndoRedo composable)
 // =====================
 const {
   saveToHistory,
-  undo: undoFromComposable,
-  redo: redoFromComposable,
+  undo,
+  redo,
   canUndo,
   canRedo,
   clearHistory,
@@ -373,10 +301,6 @@ const {
   onUndo: () => { selectedElements.value = [] },
   onRedo: () => { selectedElements.value = [] }
 })
-
-// Wrapper functions to include selectedElements clearing
-const undo = () => undoFromComposable()
-const redo = () => redoFromComposable()
 
 // Check if ID looks like a UUID (from backend)
 const isUUID = (id) => {
@@ -1388,17 +1312,8 @@ onMounted(() => {
 // Reset verbs to default SCUMM-style verbs
 const resetVerbsToDefault = () => {
   if (confirm('¿Resetear verbos a los valores por defecto? Esto reemplazará todos los verbos actuales.')) {
-    project.value.globalData.verbs = [
-      { id: 1, name: 'Mirar', icon: '👁', key: 'l' },
-      { id: 2, name: 'Recoger', icon: '✋', key: 'p' },
-      { id: 3, name: 'Usar', icon: '🔧', key: 'u' },
-      { id: 4, name: 'Abrir', icon: '📂', key: 'o' },
-      { id: 5, name: 'Cerrar', icon: '📁', key: 'c' },
-      { id: 6, name: 'Empujar', icon: '👉', key: 'e' },
-      { id: 7, name: 'Tirar', icon: '👈', key: 'y' },
-      { id: 8, name: 'Hablar', icon: '💬', key: 't' },
-      { id: 9, name: 'Dar', icon: '🎁', key: 'g' }
-    ]
+    // Deep clone to avoid mutating the constant
+    project.value.globalData.verbs = JSON.parse(JSON.stringify(DEFAULT_VERBS))
     console.log('[Editor] Verbos reseteados a valores por defecto')
   }
 }
@@ -1960,49 +1875,14 @@ onUnmounted(() => {
                 }"
               ></div>
 
-              <!-- Play Mode: Player Character -->
-              <div
-                v-if="playMode && playModeState.playerActorId"
-                class="play-mode-player"
-                :style="{
-                  left: (playModeState.playerPosition.x - playModeState.playerSize.w / 2) * zoom + 'px',
-                  top: (playModeState.playerPosition.y - playModeState.playerSize.h) * zoom + 'px',
-                  width: playModeState.playerSize.w * zoom + 'px',
-                  height: playModeState.playerSize.h * zoom + 'px'
-                }"
-              >
-                <!-- Player animation if available -->
-                <div
-                  v-if="getPlayerCurrentAnimation()"
-                  class="player-animation"
-                  :style="getPlayerAnimationStyle()"
-                ></div>
-                <div v-else class="player-placeholder">
-                  <span class="player-direction-indicator">{{ playModeState.playerDirection.charAt(0).toUpperCase() }}</span>
-                </div>
-              </div>
-
-              <!-- Play Mode: Walk Target Indicator -->
-              <div
-                v-if="playMode && playModeState.walkTarget"
-                class="walk-target-indicator"
-                :style="{
-                  left: playModeState.walkTarget.x * zoom + 'px',
-                  top: playModeState.walkTarget.y * zoom + 'px'
-                }"
-              ></div>
-
-              <!-- Play Mode: Message Display (above actor) -->
-              <div
-                v-if="playMode && playModeState.messageText"
-                class="play-message"
-                :style="{
-                  left: (playModeState.playerPosition.x) * zoom + 'px',
-                  top: (playModeState.playerPosition.y - playModeState.playerSize.h - 20) * zoom + 'px'
-                }"
-              >
-                {{ playModeState.messageText }}
-              </div>
+              <!-- Play Mode Player Elements -->
+              <CanvasPlayModePlayer
+                v-if="playMode"
+                :play-mode-state="playModeState"
+                :zoom="zoom"
+                :player-animation="getPlayerCurrentAnimation()"
+                :player-animation-style="getPlayerAnimationStyle()"
+              />
             </div>
           </div>
         </div>
@@ -2062,97 +1942,21 @@ onUnmounted(() => {
           />
 
           <!-- Multiple elements selected -->
-          <div v-else-if="selectedElements.length > 1" class="properties-form">
-            <div class="property-header multi-selection">
-              <span class="property-type">{{ selectedElements.length }} SELECTED</span>
-              <button class="delete-element-btn" @click="handleDeleteElement" title="Delete all (Del)">
-                🗑 DELETE ALL
-              </button>
-            </div>
-            <div class="multi-selection-info">
-              <p class="pixel-font-sm text-muted">Multiple elements selected</p>
-              <ul class="selection-list">
-                <li v-for="(sel, idx) in selectedElements" :key="idx" class="selection-item">
-                  <span class="item-type">{{ sel.type }}</span>
-                  <span class="item-name">{{ sel.element.name || '#' + sel.element.id }}</span>
-                </li>
-              </ul>
-            </div>
-          </div>
+          <MultiSelectionPanel
+            v-else-if="selectedElements.length > 1"
+            :selected-elements="selectedElements"
+            @delete="handleDeleteElement"
+          />
 
           <!-- Single element selected -->
           <div v-else class="properties-form">
-            <div class="property-header">
-              <span class="property-type">{{ selectedElements[0].type.toUpperCase() }}</span>
-              <button class="delete-element-btn" @click="handleDeleteElement" title="Delete (Del)">
-                🗑 DELETE
-              </button>
-            </div>
-            <div class="property-group">
-              <label class="property-label">ID</label>
-              <input
-                :value="selectedElements[0].element.id"
-                type="text"
-                class="property-input"
-                disabled
-              />
-            </div>
-            <div class="property-group">
-              <label class="property-label">Name</label>
-              <input
-                v-model="selectedElements[0].element.name"
-                type="text"
-                class="property-input"
-              />
-            </div>
-            <div class="property-group" v-if="selectedElements[0].element.x !== undefined">
-              <label class="property-label">Position</label>
-              <div class="property-row">
-                <input
-                  v-model.number="selectedElements[0].element.x"
-                  type="number"
-                  class="property-input small"
-                  placeholder="X"
-                />
-                <input
-                  v-model.number="selectedElements[0].element.y"
-                  type="number"
-                  class="property-input small"
-                  placeholder="Y"
-                />
-              </div>
-            </div>
-            <div class="property-group" v-if="selectedElements[0].element.w !== undefined">
-              <label class="property-label">Size</label>
-              <div class="property-row">
-                <input
-                  v-model.number="selectedElements[0].element.w"
-                  type="number"
-                  class="property-input small"
-                  placeholder="W"
-                />
-                <input
-                  v-model.number="selectedElements[0].element.h"
-                  type="number"
-                  class="property-input small"
-                  placeholder="H"
-                />
-              </div>
-            </div>
-            <div class="property-group" v-if="selectedElements[0].element.rotation !== undefined">
-              <label class="property-label">Rotation</label>
-              <div class="property-row">
-                <input
-                  v-model.number="selectedElements[0].element.rotation"
-                  type="number"
-                  class="property-input"
-                  placeholder="0"
-                  min="0"
-                  max="360"
-                />
-                <span class="property-unit">°</span>
-              </div>
-            </div>
+            <!-- Base properties: header, ID, name, position, size, rotation -->
+            <BaseElementProperties
+              :element="selectedElements[0].element"
+              :type="selectedElements[0].type"
+              @delete="handleDeleteElement"
+            />
+
             <!-- Image-specific properties -->
             <ImageProperties
               v-if="selectedElements[0].type === 'image'"
@@ -2308,32 +2112,20 @@ onUnmounted(() => {
     </div>
 
     <!-- Status bar -->
-    <footer class="editor-status-bar">
-      <span class="status-item">
-        Scene: {{ currentScene.name }} ({{ currentScene.width }}x{{ currentScene.height }})
-      </span>
-      <span class="status-item" v-if="selectedElements.length > 0">
-        Selected: {{ selectedElements[0].element.name || `${selectedElements[0].type} #${selectedElements[0].element.id}` }}
-      </span>
-      <span class="status-item" v-if="selectedElements.length > 0 && selectedElements[0].element.x !== undefined">
-        Position: {{ Math.round(selectedElements[0].element.x) }}, {{ Math.round(selectedElements[0].element.y) }}
-      </span>
-      <span class="status-item" v-if="selectedElements.length > 0 && selectedElements[0].element.points">
-        Position: {{ Math.round(selectedElements[0].element.points[0].x) }}, {{ Math.round(selectedElements[0].element.points[0].y) }}
-      </span>
-      <span class="status-item dragging-indicator" v-if="isDragging">
-        🔄 Dragging...
-      </span>
-      <span class="status-item" v-if="selectedElements.length === 0">
-        Click an element to select • Drag to move
-      </span>
-      <span class="status-item">
-        History: {{ historyIndex + 1 }}/{{ historyStack.length }}
-      </span>
-      <span class="status-item status-right">
-        Zoom: {{ Math.round(zoom * 100) }}%
-      </span>
-    </footer>
+    <EditorStatusBar
+      :scene-name="currentScene.name"
+      :scene-width="currentScene.width"
+      :scene-height="currentScene.height"
+      :selected-element="selectedElements.length > 0 ? selectedElements[0].element : null"
+      :selected-type="selectedElements.length > 0 ? selectedElements[0].type : null"
+      :selected-count="selectedElements.length"
+      :is-dragging="isDragging"
+      :is-resizing="isResizing"
+      :is-rotating="isRotating"
+      :history-index="historyIndex"
+      :history-length="historyStack.length"
+      :zoom="zoom"
+    />
 
     <!-- Context Menu -->
     <EditorContextMenu

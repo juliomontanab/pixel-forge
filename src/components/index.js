@@ -67,6 +67,8 @@ export { default as SceneSettingsPanel } from './properties/SceneSettingsPanel.v
 export { default as WalkboxProperties } from './properties/WalkboxProperties.vue'
 export { default as ZPlaneProperties } from './properties/ZPlaneProperties.vue'
 export { default as VerbProperties } from './properties/VerbProperties.vue'
+export { default as BaseElementProperties } from './properties/BaseElementProperties.vue'
+export { default as MultiSelectionPanel } from './properties/MultiSelectionPanel.vue'
 
 // Canvas Components
 export { default as EditorCanvas } from './canvas/EditorCanvas.vue'
@@ -77,3 +79,4 @@ export { default as CanvasParticles } from './canvas/CanvasParticles.vue'
 export { default as CanvasLighting } from './canvas/CanvasLighting.vue'
 export { default as ZoomControls } from './canvas/ZoomControls.vue'
 export { default as CanvasElements } from './canvas/CanvasElements.vue'
+export { default as CanvasPlayModePlayer } from './canvas/CanvasPlayModePlayer.vue'
